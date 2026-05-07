@@ -1,5 +1,5 @@
 {
-    "name": "planmode/graft",
+    "name": "jkudish/graft",
     "description": "Git manager and platform provider for Laravel — facades, typed DTOs, test fakes, and scoped repositories.",
     "keywords": ["laravel", "git", "github", "facade", "testing", "dto", "scoped-repository", "platform-provider"],
     "homepage": "https://github.com/jkudish/graft",
@@ -20,7 +20,7 @@
         "illuminate/http": "^11.0 || ^12.0 || ^13.0",
         "illuminate/support": "^11.0 || ^12.0 || ^13.0",
         "nesbot/carbon": "^3.0",
-        "symfony/process": "^7.0 || ^8.0"
+        "symfony/process": "^7.0"
     },
     "require-dev": {
         "larastan/larastan": "^3.0",

@@ -2,10 +2,10 @@
 
 **Git and GitHub for Laravel — facades, typed DTOs, and first-class test fakes.**
 
-[![Latest Version](https://img.shields.io/packagist/v/planmode/graft.svg?style=flat-square)](https://packagist.org/packages/planmode/graft)
-[![Total Downloads](https://img.shields.io/packagist/dt/planmode/graft.svg?style=flat-square)](https://packagist.org/packages/planmode/graft)
-[![License](https://img.shields.io/packagist/l/planmode/graft.svg?style=flat-square)](LICENSE)
-[![PHP Version](https://img.shields.io/packagist/php-v/planmode/graft.svg?style=flat-square)](composer.json)
+[![Latest Version](https://img.shields.io/packagist/v/jkudish/graft.svg?style=flat-square)](https://packagist.org/packages/jkudish/graft)
+[![Total Downloads](https://img.shields.io/packagist/dt/jkudish/graft.svg?style=flat-square)](https://packagist.org/packages/jkudish/graft)
+[![License](https://img.shields.io/packagist/l/jkudish/graft.svg?style=flat-square)](LICENSE)
+[![PHP Version](https://img.shields.io/packagist/php-v/jkudish/graft.svg?style=flat-square)](composer.json)
 
 Graft wraps the `git` CLI and the GitHub REST API behind two clean facades. Use `Git::` for local repository work, `GitHub::` for platform operations, or `Git::repo($path)` to scope both to a single repo. Every call returns a typed DTO. Every facade has a recording fake with semantic assertions so tests stay fast and expressive.
 
@@ -48,7 +48,7 @@ $pr->addLabels(['enhancement']);
 ## Installation
 
 ```bash
-composer require planmode/graft
+composer require jkudish/graft
 ```
 
 Optionally publish the config:
