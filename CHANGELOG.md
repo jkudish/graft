@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-05-07
+
 ### Added
 
 - `Git` facade for local git operations (branches, commits, index, remotes, merge, rebase, cherry-pick, tags, stash, worktrees, blame, clean)
@@ -17,3 +19,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Typed readonly DTOs for all git and platform data
 - Exception hierarchy with contextual error data (`MergeConflictException`, `PlatformException`, etc.)
 - Configuration for git binary path, process timeout, and platform provider settings
+- Laravel 13 support (`illuminate/http` and `illuminate/support` now allow `^13.0`)
