@@ -1,13 +1,31 @@
-# Graft
+<p align="center">
+  <img src="art/banner.png" alt="Graft — Git and GitHub for Laravel" width="100%">
+</p>
 
-**Git and GitHub for Laravel — facades, typed DTOs, and first-class test fakes.**
+<h1 align="center">Graft</h1>
 
-[![Latest Version](https://img.shields.io/packagist/v/jkudish/graft.svg?style=flat-square)](https://packagist.org/packages/jkudish/graft)
-[![Total Downloads](https://img.shields.io/packagist/dt/jkudish/graft.svg?style=flat-square)](https://packagist.org/packages/jkudish/graft)
-[![License](https://img.shields.io/packagist/l/jkudish/graft.svg?style=flat-square)](LICENSE)
-[![PHP Version](https://img.shields.io/packagist/php-v/jkudish/graft.svg?style=flat-square)](composer.json)
+<p align="center">
+  <strong>Branch, commit, and ship from your Laravel app — without ever shelling out by hand or hand-rolling the GitHub API.</strong>
+</p>
 
-Graft wraps the `git` CLI and the GitHub REST API behind two clean facades. Use `Git::` for local repository work, `GitHub::` for platform operations, or `Git::repo($path)` to scope both to a single repo. Every call returns a typed DTO. Every facade has a recording fake with semantic assertions so tests stay fast and expressive.
+<p align="center">
+  <a href="https://packagist.org/packages/jkudish/graft"><img src="https://img.shields.io/packagist/v/jkudish/graft.svg?style=flat-square" alt="Latest Version"></a>
+  <a href="https://packagist.org/packages/jkudish/graft"><img src="https://img.shields.io/packagist/dt/jkudish/graft.svg?style=flat-square" alt="Total Downloads"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/packagist/l/jkudish/graft.svg?style=flat-square" alt="License"></a>
+  <a href="composer.json"><img src="https://img.shields.io/packagist/php-v/jkudish/graft.svg?style=flat-square" alt="PHP Version"></a>
+</p>
+
+---
+
+Graft is the missing git-and-platform layer for Laravel. It puts everything you'd reach for `exec('git ...')` or a hand-rolled GitHub HTTP client to do behind two clean facades — `Git` and `GitHub` — and returns typed, readonly DTOs instead of raw output or arrays.
+
+It was built for the kind of app that needs to *do real work* in real repos: tools that orchestrate AI coding agents, dashboards that open and merge PRs on your behalf, internal automation that branches, commits, and ships. It scales from "create a tag" to "spin up a worktree, run a series of changes, open a PR, request review, watch CI, merge, and clean up" — without you ever leaving Laravel idioms.
+
+Three things make it pleasant:
+
+- **`Git::repo($path)`** scopes both git and platform calls to a single repository — no more threading `$repoPath` through every method, and `owner/repo` is auto-detected from the origin remote.
+- **Active objects.** `$pr->merge()`, `$pr->requestReview([...])`, `$issue->close()` — DTOs returned from the platform carry their actions with them.
+- **Tests that read like specs.** `Git::fake()` and `GitHub::fake()` return recording fakes with semantic assertions (`assertBranchCreated`, `assertPrCreated`, `assertReviewRequested`) — no Mockery boilerplate, no string-matching command lines.
 
 ```php
 use Graft\Facades\Git;
@@ -30,14 +48,14 @@ $pr->requestReview(['teammate']);
 $pr->addLabels(['enhancement']);
 ```
 
-## Why Graft?
+## What's in the box
 
-- **One API for two domains.** Branch locally and open a PR in the same fluent chain.
-- **Typed everything.** No associative-array soup — every result is a readonly DTO with named, typed properties.
-- **Tests that read like specs.** `$fake->assertBranchCreated('feature/x')` instead of inspecting argument lists.
-- **Scoped to a repo.** `Git::repo($path)` removes the `$repoPath` argument from every call and auto-detects `owner/repo` from the origin remote for platform operations.
-- **Active objects.** PRs and Issues returned from the platform carry their own action methods — `$pr->merge()`, `$issue->close()`.
-- **Errors with context.** `MergeConflictException` exposes the conflicting files; `PlatformException` exposes the status code and response body.
+- **`Git` facade** — branches, commits, index, remotes, merge, rebase, cherry-pick, tags, stash, worktrees, blame, clean.
+- **`GitHub` facade** — pull requests, issues, reviews, comments, CI status, labels, repository info.
+- **Scoped repository** — `Git::repo($path)` binds both surfaces to a single repo and auto-detects `owner/repo` from the origin remote.
+- **Typed DTOs** — `Branch`, `Commit`, `Status`, `MergeResult`, `Stash`, `Worktree`, `PullRequest`, `Issue`, `Review`, `CheckRun`, `CiStatus`, and more — all readonly, all with named properties.
+- **Recording fakes** — `Git::fake()` and `GitHub::fake()` swap the real implementations for in-memory recorders with semantic assertions and configurable return values / exceptions.
+- **Errors with context** — `MergeConflictException` exposes the conflicting files; `PlatformException` exposes the status code and the response body.
 
 ## Requirements
 
