@@ -1,14 +1,49 @@
 # Graft
 
-Git manager and platform provider for Laravel.
+**Git and GitHub for Laravel — facades, typed DTOs, and first-class test fakes.**
 
-Graft wraps git CLI operations and GitHub API calls behind clean facades, typed DTOs, and first-class test fakes. Use `Git::` for local repository work, `GitHub::` for platform operations, or `Git::repo($path)` to scope both to a single repository.
+[![Latest Version](https://img.shields.io/packagist/v/planmode/graft.svg?style=flat-square)](https://packagist.org/packages/planmode/graft)
+[![Total Downloads](https://img.shields.io/packagist/dt/planmode/graft.svg?style=flat-square)](https://packagist.org/packages/planmode/graft)
+[![License](https://img.shields.io/packagist/l/planmode/graft.svg?style=flat-square)](LICENSE)
+[![PHP Version](https://img.shields.io/packagist/php-v/planmode/graft.svg?style=flat-square)](composer.json)
+
+Graft wraps the `git` CLI and the GitHub REST API behind two clean facades. Use `Git::` for local repository work, `GitHub::` for platform operations, or `Git::repo($path)` to scope both to a single repo. Every call returns a typed DTO. Every facade has a recording fake with semantic assertions so tests stay fast and expressive.
+
+```php
+use Graft\Facades\Git;
+
+$repo = Git::repo('/path/to/project');
+
+$repo->checkout('feature/payments', create: true);
+$repo->add('.');
+$repo->commit('Add Stripe webhook handler');
+$repo->push(setUpstream: true);
+
+$pr = $repo->createPullRequest(
+    title: 'Add Stripe webhook handler',
+    body: 'Closes #142',
+    head: 'feature/payments',
+    base: 'main',
+);
+
+$pr->requestReview(['teammate']);
+$pr->addLabels(['enhancement']);
+```
+
+## Why Graft?
+
+- **One API for two domains.** Branch locally and open a PR in the same fluent chain.
+- **Typed everything.** No associative-array soup — every result is a readonly DTO with named, typed properties.
+- **Tests that read like specs.** `$fake->assertBranchCreated('feature/x')` instead of inspecting argument lists.
+- **Scoped to a repo.** `Git::repo($path)` removes the `$repoPath` argument from every call and auto-detects `owner/repo` from the origin remote for platform operations.
+- **Active objects.** PRs and Issues returned from the platform carry their own action methods — `$pr->merge()`, `$issue->close()`.
+- **Errors with context.** `MergeConflictException` exposes the conflicting files; `PlatformException` exposes the status code and response body.
 
 ## Requirements
 
 - PHP 8.2+
-- Laravel 11 or 12
-- Git binary available on `PATH`
+- Laravel 11, 12, or 13
+- `git` binary on `PATH`
 
 ## Installation
 
@@ -16,7 +51,7 @@ Graft wraps git CLI operations and GitHub API calls behind clean facades, typed 
 composer require planmode/graft
 ```
 
-Publish the config file (optional):
+Optionally publish the config:
 
 ```bash
 php artisan vendor:publish --tag=graft-config
@@ -28,173 +63,133 @@ Set your GitHub token in `.env`:
 GITHUB_TOKEN=ghp_your_token_here
 ```
 
-## Quick Start
+## Table of Contents
 
-```php
-use Graft\Facades\Git;
-use Graft\Facades\GitHub;
-
-// Scope everything to a single repository
-$repo = Git::repo('/path/to/project');
-
-// Branch, commit, push
-$repo->checkout('feature/new-thing', create: true);
-$repo->add('.');
-$repo->commit('Add new feature');
-$repo->push(setUpstream: true);
-
-// Open a PR and request review
-$pr = $repo->createPullRequest(
-    title: 'Add new feature',
-    body: 'Description of changes',
-    head: 'feature/new-thing',
-    base: 'main',
-);
-$pr->requestReview(['teammate']);
-$pr->addLabels(['enhancement']);
-```
-
-## Git Operations
-
-The `Git` facade proxies all methods on `GitManager`. Every method takes `$repoPath` as its first argument.
-
-### Branches
-
-```php
-use Graft\Facades\Git;
-
-$branches = Git::branches('/path/to/repo');           // Collection<Branch>
-$current  = Git::currentBranch('/path/to/repo');       // "main"
-$exists   = Git::branchExists('/path/to/repo', 'dev');
-
-Git::createBranch('/path/to/repo', 'feature/x', 'main');
-Git::checkout('/path/to/repo', 'feature/x');
-Git::deleteBranch('/path/to/repo', 'feature/x', force: true);
-```
-
-### Commits and Index
-
-```php
-Git::add('/path/to/repo', ['src/File.php', 'tests/FileTest.php']);
-Git::add('/path/to/repo');  // stages everything
-
-$commit = Git::commit('/path/to/repo', 'Fix the thing');
-// => Commit { hash, shortHash, message, author, email, date, parents }
-
-$log    = Git::log('/path/to/repo', limit: 5);        // Collection<Commit>
-$head   = Git::show('/path/to/repo');                  // Commit at HEAD
-$status = Git::status('/path/to/repo');                // Status { staged, unstaged, untracked }
-$diff   = Git::diff('/path/to/repo', staged: true);   // string
-```
-
-### Remotes and Syncing
-
-```php
-Git::fetch('/path/to/repo', prune: true);
-Git::pull('/path/to/repo', 'origin', 'main');
-Git::push('/path/to/repo', 'origin', 'main', force: false, setUpstream: true);
-
-$remotes = Git::remotes('/path/to/repo');  // Collection<Remote>
-Git::addRemote('/path/to/repo', 'upstream', 'https://github.com/org/repo.git');
-Git::removeRemote('/path/to/repo', 'upstream');
-```
-
-### Merge, Rebase, Cherry-pick
-
-```php
-$result = Git::merge('/path/to/repo', 'feature/x', noFf: true);
-// => MergeResult { success: true, message: null, conflicts: [] }
-
-Git::rebase('/path/to/repo', 'main');
-Git::cherryPick('/path/to/repo', ['abc123', 'def456']);
-
-// Abort operations
-Git::mergeAbort('/path/to/repo');
-Git::rebaseAbort('/path/to/repo');
-Git::cherryPickAbort('/path/to/repo');
-```
-
-### Tags
-
-```php
-$tags = Git::tags('/path/to/repo');  // Collection<string>
-Git::createTag('/path/to/repo', 'v1.0.0', message: 'Release 1.0');
-Git::deleteTag('/path/to/repo', 'v1.0.0');
-```
-
-### Stash
-
-```php
-Git::stash('/path/to/repo', message: 'WIP', includeUntracked: true);
-Git::stashPop('/path/to/repo');
-$stashes = Git::stashList('/path/to/repo');  // Collection<Stash>
-Git::stashDrop('/path/to/repo', index: 0);
-```
-
-### Worktrees
-
-```php
-$wt = Git::addWorktree('/path/to/repo', '/tmp/worktree', 'feature/x', createBranch: true);
-// => Worktree { path, branch, head, isBare }
-
-$worktrees = Git::listWorktrees('/path/to/repo');
-Git::removeWorktree('/path/to/repo', '/tmp/worktree', force: true);
-Git::pruneWorktrees('/path/to/repo');
-```
-
-### Repository and Config
-
-```php
-Git::init('/path/to/new-repo', bare: false);
-Git::clone('https://github.com/org/repo.git', '/path/to/dest', branch: 'main');
-Git::isRepository('/some/path');  // bool
-
-Git::getConfig('/path/to/repo', 'user.name');            // ?string
-Git::setConfig('/path/to/repo', 'user.name', 'Graft');
-
-$blame = Git::blame('/path/to/repo', 'src/File.php');    // Collection<Blame>
-Git::clean('/path/to/repo', directories: true);
-```
+- [Scoped Repository](#scoped-repository) — the recommended entry point
+- [Git Facade](#git-facade) — local repository operations
+- [GitHub Facade](#github-facade) — platform operations
+- [Active Objects](#active-objects) — methods on PRs and Issues
+- [Testing](#testing) — `Git::fake()` and `GitHub::fake()`
+- [Error Handling](#error-handling)
+- [Configuration](#configuration)
+- [DTOs](#data-transfer-objects)
 
 ## Scoped Repository
 
-`Git::repo($path)` returns a `ScopedRepository` that binds both git and platform operations to a single path. No more passing `$repoPath` everywhere.
+`Git::repo($path)` returns a `ScopedRepository` that binds both git and platform operations to a single path. It's the most ergonomic way to use Graft.
 
 ```php
 $repo = Git::repo('/path/to/project');
 
-// Git operations without $repoPath
 $repo->currentBranch();
 $repo->checkout('feature/x', create: true);
 $repo->add('.');
 $repo->commit('Changes');
 $repo->push(setUpstream: true);
 
-// Platform operations auto-detect owner/repo from the origin remote
-$pr = $repo->createPullRequest(
-    title: 'Feature X',
-    body: 'Description',
-    head: 'feature/x',
-    base: 'main',
-);
-
+$pr     = $repo->createPullRequest(title: 'Feature X', body: '...', head: 'feature/x', base: 'main');
 $issues = $repo->listIssues();
 $ci     = $repo->getCiStatus('feature/x');
 ```
 
-The scoped repository detects `owner/repo` from the origin remote URL (supports both HTTPS and SSH formats) and resolves the correct platform provider automatically.
+The scoped repository detects `owner/repo` from the origin remote URL (HTTPS or SSH) and resolves the configured platform provider automatically.
 
-## Platform Operations (GitHub)
+## Git Facade
+
+The `Git` facade proxies all methods on `GitManager`. Each method takes `$repoPath` as its first argument — or use `Git::repo($path)` to drop it entirely.
+
+### Branches
+
+```php
+Git::branches($path);              // Collection<Branch>
+Git::currentBranch($path);         // "main"
+Git::branchExists($path, 'dev');
+
+Git::createBranch($path, 'feature/x', 'main');
+Git::checkout($path, 'feature/x');
+Git::deleteBranch($path, 'feature/x', force: true);
+```
+
+### Commits and Index
+
+```php
+Git::add($path, ['src/File.php']);
+Git::add($path);                                         // stage everything
+
+$commit = Git::commit($path, 'Fix the thing');
+// Commit { hash, shortHash, message, author, email, date, parents }
+
+Git::log($path, limit: 5);                               // Collection<Commit>
+Git::show($path);                                        // HEAD commit
+Git::status($path);                                      // Status { staged, unstaged, untracked }
+Git::diff($path, staged: true);                          // string
+```
+
+### Remotes and Syncing
+
+```php
+Git::fetch($path, prune: true);
+Git::pull($path, 'origin', 'main');
+Git::push($path, 'origin', 'main', setUpstream: true);
+
+Git::remotes($path);                                     // Collection<Remote>
+Git::addRemote($path, 'upstream', 'https://github.com/org/repo.git');
+Git::removeRemote($path, 'upstream');
+```
+
+### Merge, Rebase, Cherry-pick
+
+```php
+$result = Git::merge($path, 'feature/x', noFf: true);
+// MergeResult { success, message, conflicts }
+
+Git::rebase($path, 'main');
+Git::cherryPick($path, ['abc123', 'def456']);
+
+Git::mergeAbort($path);
+Git::rebaseAbort($path);
+Git::cherryPickAbort($path);
+```
+
+### Tags, Stash, Worktrees
+
+```php
+Git::tags($path);                                        // Collection<string>
+Git::createTag($path, 'v1.0.0', message: 'Release 1.0');
+Git::deleteTag($path, 'v1.0.0');
+
+Git::stash($path, message: 'WIP', includeUntracked: true);
+Git::stashPop($path);
+Git::stashList($path);                                   // Collection<Stash>
+
+$wt = Git::addWorktree($path, '/tmp/worktree', 'feature/x', createBranch: true);
+Git::listWorktrees($path);                               // Collection<Worktree>
+Git::removeWorktree($path, '/tmp/worktree', force: true);
+```
+
+### Repository and Config
+
+```php
+Git::init('/path/to/new-repo');
+Git::clone('https://github.com/org/repo.git', '/path/to/dest', branch: 'main');
+Git::isRepository('/some/path');
+
+Git::getConfig($path, 'user.name');
+Git::setConfig($path, 'user.name', 'Graft');
+
+Git::blame($path, 'src/File.php');                       // Collection<Blame>
+Git::clean($path, directories: true);
+```
+
+## GitHub Facade
 
 The `GitHub` facade works with any repository by passing `owner/repo` directly.
 
 ### Pull Requests
 
 ```php
-use Graft\Facades\GitHub;
-
-$pr = GitHub::createPullRequest('owner/repo', 'Title', 'Body', 'feature', 'main', draft: true);
-$pr = GitHub::getPullRequest('owner/repo', 42);
+$pr  = GitHub::createPullRequest('owner/repo', 'Title', 'Body', 'feature', 'main', draft: true);
+$pr  = GitHub::getPullRequest('owner/repo', 42);
 $prs = GitHub::listPullRequests('owner/repo', state: 'open');
 
 GitHub::updatePullRequest('owner/repo', 42, ['title' => 'New title']);
@@ -205,30 +200,24 @@ GitHub::closePullRequest('owner/repo', 42);
 ### Issues
 
 ```php
-$issue = GitHub::createIssue('owner/repo', 'Bug report', 'Details', labels: ['bug']);
+$issue = GitHub::createIssue('owner/repo', 'Bug', 'Details', labels: ['bug']);
 $issue = GitHub::getIssue('owner/repo', 10);
-$issues = GitHub::listIssues('owner/repo', state: 'open');
+
+GitHub::listIssues('owner/repo', state: 'open');
 GitHub::updateIssue('owner/repo', 10, ['state' => 'closed']);
 ```
 
-### Reviews and Comments
+### Reviews, Comments, CI, Labels
 
 ```php
-GitHub::requestReview('owner/repo', 42, ['reviewer1', 'reviewer2']);
-$reviews = GitHub::listReviews('owner/repo', 42);  // Collection<Review>
+GitHub::requestReview('owner/repo', 42, ['reviewer1']);
+GitHub::listReviews('owner/repo', 42);                   // Collection<Review>
 
-$comment = GitHub::addComment('owner/repo', 42, 'Looks good!');
-$comments = GitHub::listComments('owner/repo', 42);
-GitHub::addReviewComment('owner/repo', 42, 'Nit: typo', 'abc123', 'src/File.php', 15);
-```
+GitHub::addComment('owner/repo', 42, 'Looks good!');
+GitHub::addReviewComment('owner/repo', 42, 'Nit', 'abc123', 'src/File.php', 15);
 
-### CI and Labels
-
-```php
-$ci = GitHub::getCiStatus('owner/repo', 'abc123');
-// => CiStatus { state: "success", checkRuns: Collection<CheckRun> }
-
-$checks = GitHub::listCheckRuns('owner/repo', 'abc123');
+GitHub::getCiStatus('owner/repo', 'abc123');             // CiStatus { state, checkRuns }
+GitHub::listCheckRuns('owner/repo', 'abc123');
 
 GitHub::addLabels('owner/repo', 42, ['ready-for-review']);
 GitHub::removeLabel('owner/repo', 42, 'wip');
@@ -237,71 +226,64 @@ GitHub::removeLabel('owner/repo', 42, 'wip');
 ### Repository Info
 
 ```php
-$repo = GitHub::getRepository('owner/repo');
-// => Repository { name, fullName, description, defaultBranch, private, url }
+GitHub::getRepository('owner/repo');
+// Repository { name, fullName, description, defaultBranch, private, url }
 ```
 
 ## Active Objects
 
-`PullRequest` and `Issue` DTOs returned from the platform provider carry a reference to the provider, enabling action methods directly on the object.
-
-### PullRequest
+`PullRequest` and `Issue` DTOs returned from the platform provider carry a reference back to the provider so you can act on them directly.
 
 ```php
 $pr = GitHub::getPullRequest('owner/repo', 42);
 
 $pr->merge(method: 'squash');
 $pr->close();
-$pr->update(['title' => 'Updated title']);
+$pr->update(['title' => 'Updated']);
 $pr->requestReview(['teammate']);
-$pr->listReviews();
 $pr->addComment('Ship it!');
-$pr->listComments();
 $pr->addReviewComment('Fix this', 'abc123', 'src/File.php', 10);
 $pr->getCiStatus();
 $pr->addLabels(['approved']);
-$pr->removeLabel('wip');
-```
 
-### Issue
-
-```php
 $issue = GitHub::getIssue('owner/repo', 10);
 
 $issue->close();
-$issue->update(['title' => 'Updated title']);
-$issue->addComment('Fixed in PR #42');
-$issue->listComments();
+$issue->update(['title' => 'Updated']);
+$issue->addComment('Fixed in #42');
 $issue->addLabels(['resolved']);
-$issue->removeLabel('bug');
 ```
 
 ## Testing
 
-Both facades have `fake()` methods that swap the real implementation with a recording fake. The fakes record all calls and provide semantic assertions.
-
-### Git::fake()
+Both facades have `fake()` methods that swap in a recording fake with semantic assertions.
 
 ```php
 use Graft\Facades\Git;
+use Graft\Facades\GitHub;
 
-it('creates a feature branch and pushes', function () {
-    $fake = Git::fake();
+it('creates a feature branch, opens a PR, and requests review', function () {
+    $git = Git::fake();
+    $github = GitHub::fake();
 
-    // Run your code that uses Git::...
+    // ...your code under test...
 
-    $fake->assertBranchCreated('feature/x');
-    $fake->assertCheckedOut('feature/x');
-    $fake->assertCommitted('Add feature');
-    $fake->assertPushed('feature/x');
+    $git->assertBranchCreated('feature/x');
+    $git->assertCommitted('Add feature');
+    $git->assertPushed('feature/x');
+
+    $github->assertPrCreated('Add feature');
+    $github->assertReviewRequested(['teammate']);
+    $github->assertLabelsAdded(['enhancement']);
 });
 ```
 
-#### Available Git Assertions
+### Git Assertions
 
 ```php
-$fake->assertCalled('methodName');               // Generic: method was called
-$fake->assertCalled('commit', fn ($args) => ...); // With argument check
+// Generic
+$fake->assertCalled('commit');
+$fake->assertCalled('commit', fn ($args) => str_contains($args[1], 'fix'));
 $fake->assertNotCalled('push');
 $fake->assertCalledTimes('fetch', 2);
 
@@ -320,70 +302,46 @@ $fake->assertWorktreeAdded('/path');
 $fake->assertWorktreeRemoved('/path');
 $fake->assertStashed();
 
-// Nothing assertions
+// Negative
 $fake->assertNothingPushed();
 $fake->assertNothingCommitted();
 $fake->assertNothingCalled();
 ```
 
-#### Configuring Return Values and Exceptions
+### GitHub Assertions
 
 ```php
-$fake = Git::fake();
-$fake->shouldReturn('currentBranch', 'develop');
-$fake->shouldReturn('status', new Status(staged: ['file.php'], unstaged: [], untracked: []));
-
-$fake->shouldThrow('push', new ProcessException('Remote rejected'));
-```
-
-### GitHub::fake()
-
-```php
-use Graft\Facades\GitHub;
-
-it('creates a PR and requests review', function () {
-    $fake = GitHub::fake();
-
-    // Run your code that uses GitHub::...
-
-    $fake->assertPrCreated('Add feature');
-    $fake->assertReviewRequested(['teammate']);
-    $fake->assertLabelsAdded(['enhancement']);
-});
-```
-
-#### Available GitHub Assertions
-
-```php
-$fake->assertCalled('methodName');
-$fake->assertNotCalled('methodName');
-$fake->assertCalledTimes('methodName', 2);
-
-// Semantic
 $fake->assertPrCreated('title');
 $fake->assertPrMerged(42);
 $fake->assertPrClosed(42);
 $fake->assertIssueCreated('title');
 $fake->assertIssueClosed(10);
 $fake->assertCommentAdded('body substring');
-$fake->assertLabelsAdded(['label1', 'label2']);
+$fake->assertLabelsAdded(['label1']);
 $fake->assertReviewRequested(['reviewer1']);
 $fake->assertNothingCalled();
 ```
 
-## Error Handling
+### Configuring Return Values and Errors
 
-All exceptions extend from two base classes:
+```php
+$fake = Git::fake();
+$fake->shouldReturn('currentBranch', 'develop');
+$fake->shouldReturn('status', new Status(staged: ['file.php'], unstaged: [], untracked: []));
+$fake->shouldThrow('push', new ProcessException('Remote rejected'));
+```
+
+## Error Handling
 
 ```
 RuntimeException
-├── GitException                  # Base for all git errors (command, stderr)
-│   ├── ProcessException          # Git process failed
-│   ├── BranchException           # Branch operation failed
-│   ├── MergeConflictException    # Merge conflict (conflicts list)
-│   ├── WorktreeException         # Worktree operation failed
-│   └── TagException              # Tag operation failed
-└── PlatformException             # GitHub API error (statusCode, response)
+├── GitException                 // base for all git errors (command + stderr context)
+│   ├── ProcessException         // git process failed
+│   ├── BranchException          // branch operation failed
+│   ├── MergeConflictException   // exposes conflicts: list<string>
+│   ├── WorktreeException
+│   └── TagException
+└── PlatformException            // exposes statusCode + response
 ```
 
 ```php
@@ -393,15 +351,15 @@ use Graft\Exceptions\PlatformException;
 try {
     Git::merge($path, 'feature/x');
 } catch (MergeConflictException $e) {
-    $conflictingFiles = $e->conflicts;  // list<string>
+    $e->conflicts;                // list<string>
     Git::mergeAbort($path);
 }
 
 try {
     GitHub::mergePullRequest('owner/repo', 42);
 } catch (PlatformException $e) {
-    $e->statusCode;  // 409
-    $e->response;    // ['message' => 'Pull request is not mergeable']
+    $e->statusCode;               // 409
+    $e->response;                 // ['message' => 'Pull request is not mergeable']
 }
 ```
 
@@ -411,18 +369,14 @@ Published to `config/graft.php`:
 
 ```php
 return [
-    // Path to the git binary
     'git_binary' => env('GRAFT_GIT_BINARY', 'git'),
-
-    // Default timeout in seconds for git commands
-    'timeout' => env('GRAFT_TIMEOUT', 60),
+    'timeout'    => env('GRAFT_TIMEOUT', 60),
 
     'platform' => [
-        'default' => env('GRAFT_PLATFORM', 'github'),
-
+        'default'   => env('GRAFT_PLATFORM', 'github'),
         'providers' => [
             'github' => [
-                'token' => env('GITHUB_TOKEN'),
+                'token'    => env('GITHUB_TOKEN'),
                 'base_url' => env('GITHUB_API_URL', 'https://api.github.com'),
             ],
         ],
@@ -433,7 +387,7 @@ return [
 | Variable | Default | Description |
 |---|---|---|
 | `GITHUB_TOKEN` | *(required)* | GitHub personal access token |
-| `GRAFT_GIT_BINARY` | `git` | Path to git binary |
+| `GRAFT_GIT_BINARY` | `git` | Path to the git binary |
 | `GRAFT_TIMEOUT` | `60` | Timeout in seconds for git commands |
 | `GRAFT_PLATFORM` | `github` | Default platform provider |
 | `GITHUB_API_URL` | `https://api.github.com` | GitHub API base URL (for GitHub Enterprise) |
@@ -445,6 +399,17 @@ All DTOs are readonly classes with typed properties.
 **Git:** `Branch`, `Commit`, `Status`, `Remote`, `MergeResult`, `Stash`, `Worktree`, `Blame`
 
 **Platform:** `PullRequest` (active), `Issue` (active), `Comment`, `Review`, `CheckRun`, `CiStatus`, `Repository`
+
+## Contributing
+
+PRs welcome. Run the suite before pushing:
+
+```bash
+composer test         # unit + feature
+composer test:all     # includes integration (requires real git)
+composer phpstan      # level 8
+composer lint         # Pint
+```
 
 ## License
 
