@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-05-07
+
+### Added
+
+- GitHub Actions CI: tests workflow (PHP 8.2, 8.3, 8.4) and code-quality workflow (PHPStan + Pint check)
+- README badges for build status, tests, and code quality
+
+## [0.1.1] - 2026-05-07
+
+### Added
+
+- `symfony/process` constraint widened to allow `^7.0 || ^8.0`
+
 ## [0.1.0] - 2026-05-07
 
 ### Added

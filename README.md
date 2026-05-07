@@ -10,6 +10,8 @@
 
 <p align="center">
   <a href="https://packagist.org/packages/jkudish/graft"><img src="https://img.shields.io/packagist/v/jkudish/graft.svg?style=flat-square" alt="Latest Version"></a>
+  <a href="https://github.com/jkudish/graft/actions/workflows/tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/jkudish/graft/tests.yml?branch=main&label=tests&style=flat-square" alt="Tests"></a>
+  <a href="https://github.com/jkudish/graft/actions/workflows/code-quality.yml"><img src="https://img.shields.io/github/actions/workflow/status/jkudish/graft/code-quality.yml?branch=main&label=code%20quality&style=flat-square" alt="Code Quality"></a>
   <a href="https://packagist.org/packages/jkudish/graft"><img src="https://img.shields.io/packagist/dt/jkudish/graft.svg?style=flat-square" alt="Total Downloads"></a>
   <a href="LICENSE"><img src="https://img.shields.io/packagist/l/jkudish/graft.svg?style=flat-square" alt="License"></a>
   <a href="composer.json"><img src="https://img.shields.io/packagist/php-v/jkudish/graft.svg?style=flat-square" alt="PHP Version"></a>
