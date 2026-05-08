@@ -24,9 +24,13 @@
     },
     "require-dev": {
         "larastan/larastan": "^3.0",
+        "laravel/ai": "^0.3",
         "laravel/pint": "^1.0",
         "orchestra/testbench": "^10.0",
         "pestphp/pest": "^4.0"
+    },
+    "suggest": {
+        "laravel/ai": "Required to use the optional AI tools in Graft\\Ai\\Tools (^0.3)"
     },
     "autoload": {
         "psr-4": {
