@@ -13,6 +13,7 @@ use Graft\Ai\Tools\GitHubListPrsTool;
 use Graft\Ai\Tools\GitHubPrReviewTool;
 use Graft\Ai\Tools\GitLogTool;
 use Graft\Ai\Tools\GitStatusTool;
+use Graft\Auth\GitCredentialHelper;
 use Graft\Contracts\GitManager;
 use Graft\Contracts\PlatformProvider;
 use Illuminate\Foundation\Console\AboutCommand;
@@ -27,6 +28,7 @@ class GraftServiceProvider extends ServiceProvider
         $this->app->singleton(GitManager::class, fn (): ProcessGitManager => new ProcessGitManager(
             binary: config('graft.git_binary', 'git'),
             timeout: config('graft.timeout', 60),
+            credentialHelper: $this->makeGitHubCredentialHelper(),
         ));
 
         $this->app->singleton(GraftManager::class, fn ($app): GraftManager => new GraftManager(
@@ -61,5 +63,44 @@ class GraftServiceProvider extends ServiceProvider
             'Git Binary' => config('graft.git_binary'),
             'Platform' => config('graft.platform.default'),
         ]);
+    }
+
+    /**
+     * Build the credential helper for the GitHub provider from config.
+     *
+     * Returns null when there's no token configured — keeping behavior
+     * identical to v0.1.x for apps that never set GITHUB_TOKEN.
+     */
+    protected function makeGitHubCredentialHelper(): ?GitCredentialHelper
+    {
+        /** @var array<string, mixed> $github */
+        $github = (array) config('graft.platform.providers.github', []);
+
+        $token = isset($github['token']) && is_string($github['token']) ? $github['token'] : null;
+        if ($token === null || $token === '') {
+            return null;
+        }
+
+        /** @var array<string, mixed> $creds */
+        $creds = (array) ($github['git_credentials'] ?? []);
+
+        $apiBaseUrl = isset($github['base_url']) && is_string($github['base_url'])
+            ? $github['base_url']
+            : 'https://api.github.com';
+
+        $host = isset($creds['host']) && is_string($creds['host']) && $creds['host'] !== ''
+            ? $creds['host']
+            : null;
+
+        return new GitCredentialHelper(
+            token: $token,
+            enabled: (bool) ($creds['enabled'] ?? true),
+            mode: is_string($creds['mode'] ?? null) ? $creds['mode'] : GitCredentialHelper::MODE_BAKED,
+            username: is_string($creds['username'] ?? null) && $creds['username'] !== ''
+                ? $creds['username']
+                : 'x-access-token',
+            host: $host,
+            apiBaseUrl: $apiBaseUrl,
+        );
     }
 }
