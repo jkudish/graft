@@ -83,6 +83,8 @@ Set your GitHub token in `.env`:
 GITHUB_TOKEN=ghp_your_token_here
 ```
 
+That single token powers both the GitHub API client *and* git's HTTPS auth — see [Authentication](#authentication) for the details, including the `config:cache` gotcha that bites every Forge deploy.
+
 ## Table of Contents
 
 - [Scoped Repository](#scoped-repository) — the recommended entry point
@@ -90,6 +92,7 @@ GITHUB_TOKEN=ghp_your_token_here
 - [GitHub Facade](#github-facade) — platform operations
 - [AI Tools](#ai-tools-laravel-ai-sdk) — ready-to-use tools for the Laravel AI SDK
 - [Active Objects](#active-objects) — methods on PRs and Issues
+- [Authentication](#authentication) — one token for the API and git subprocesses
 - [Testing](#testing) — `Git::fake()` and `GitHub::fake()`
 - [Error Handling](#error-handling)
 - [Configuration](#configuration)
@@ -338,6 +341,56 @@ $issue->addComment('Fixed in #42');
 $issue->addLabels(['resolved']);
 ```
 
+## Authentication
+
+Graft uses a single token — `GITHUB_TOKEN` — for two distinct things:
+
+1. **The GitHub API client.** `Bearer` auth on every HTTP call — no surprises.
+2. **`git` subprocesses over HTTPS.** Anything that reaches a remote (`Git::clone`, `Git::fetch`, `Git::pull`, `Git::push`, `Git::addWorktree` on a private parent) needs the same token to authenticate.
+
+Graft handles both for you. When you call `Git::init`, `Git::clone`, or `Git::addWorktree`, it writes a host-scoped credential helper to the repo's `.git/config` so subsequent git operations authenticate without further setup.
+
+### The two modes
+
+```php
+'git_credentials' => [
+    'enabled'  => env('GRAFT_GIT_CREDENTIALS_ENABLED', true),
+    'mode'     => env('GRAFT_GIT_CREDENTIALS_MODE', 'baked'),
+    'username' => env('GRAFT_GIT_CREDENTIALS_USERNAME', 'x-access-token'),
+    'host'     => env('GRAFT_GIT_CREDENTIALS_HOST'), // null = derive from base_url
+],
+```
+
+| Mode    | What lands in `.git/config`                                    | Token at rest? | Best for                                                      |
+|---------|----------------------------------------------------------------|----------------|---------------------------------------------------------------|
+| `baked` | The literal token, inside a per-host credential helper snippet | Yes            | Production servers, especially behind `config:cache` (default) |
+| `env`   | A `${GRAFT_GITHUB_TOKEN}` placeholder; Graft injects the var into every git subprocess's env | No | Environments where you don't want secrets in `.git/config` |
+
+> **About `baked`-mode threat surface.** Token-at-rest in `.git/config` is roughly the same threat surface as `.env`, with one wrinkle: `.env` is typically `640` (or stricter) on Forge-style deploys, while `.git/config` is whatever umask gives you (usually `644`). On shared hosts where local users matter, lock down `.git/config` permissions or use `mode=env`.
+
+### Hosts and GitHub Enterprise
+
+The credential host is auto-derived from `base_url` by stripping a leading `api.` — that covers github.com (`api.github.com → github.com`) and the canonical GHE pattern (`https://github.example.com/api/v3` → `https://github.example.com`). Self-hosted setups that don't follow either pattern should set `GRAFT_GIT_CREDENTIALS_HOST` explicitly.
+
+If you've already configured a per-host credential helper at the same key (e.g. via `gh auth setup-git`), Graft's installation will overwrite it on the next `init` / `clone` / `addWorktree`. Set `enabled=false` to keep your existing setup.
+
+### The `config:cache` gotcha
+
+This is the bug that motivated the unified token feature, and it's worth knowing about even if you never look at the implementation.
+
+Laravel's `config:cache` skips `LoadEnvironmentVariables` on subsequent boots. After it runs, your `.env` values still reach `config()` (because they were captured when the cache was built), but `$_ENV` and `$_SERVER` are *empty*. Symfony Process inherits its child env from `$_ENV + $_SERVER` (not `getenv_all`), so a credential helper that does `password=$GITHUB_TOKEN` finds nothing and `git fetch` fails with `Authentication failed`.
+
+Graft sidesteps this in both modes:
+
+- `baked` mode never relies on env at all — the token is in `.git/config`.
+- `env` mode passes `GRAFT_GITHUB_TOKEN` to `Process` via the explicit `$env` array, which Symfony forwards to the child regardless of `$_ENV` state.
+
+If you've ever shipped an app to Forge with a hand-rolled credential helper script, this is the failure mode you hit. The default `baked` mode makes it impossible.
+
+### Opting out
+
+Set `GRAFT_GIT_CREDENTIALS_ENABLED=false` to skip credential installation entirely. Graft's other behavior is unchanged. You're then responsible for git auth — typically a global `gh auth setup-git`, a system credential helper, or your own per-repo helper.
+
 ## Testing
 
 Both facades have `fake()` methods that swap in a recording fake with semantic assertions.
@@ -462,6 +515,13 @@ return [
             'github' => [
                 'token'    => env('GITHUB_TOKEN'),
                 'base_url' => env('GITHUB_API_URL', 'https://api.github.com'),
+
+                'git_credentials' => [
+                    'enabled'  => env('GRAFT_GIT_CREDENTIALS_ENABLED', true),
+                    'mode'     => env('GRAFT_GIT_CREDENTIALS_MODE', 'baked'),
+                    'username' => env('GRAFT_GIT_CREDENTIALS_USERNAME', 'x-access-token'),
+                    'host'     => env('GRAFT_GIT_CREDENTIALS_HOST'),
+                ],
             ],
         ],
     ],
@@ -470,11 +530,15 @@ return [
 
 | Variable | Default | Description |
 |---|---|---|
-| `GITHUB_TOKEN` | *(required)* | GitHub personal access token |
+| `GITHUB_TOKEN` | *(required)* | GitHub personal access token (used for both API and git HTTPS auth) |
 | `GRAFT_GIT_BINARY` | `git` | Path to the git binary |
 | `GRAFT_TIMEOUT` | `60` | Timeout in seconds for git commands |
 | `GRAFT_PLATFORM` | `github` | Default platform provider |
 | `GITHUB_API_URL` | `https://api.github.com` | GitHub API base URL (for GitHub Enterprise) |
+| `GRAFT_GIT_CREDENTIALS_ENABLED` | `true` | Auto-install a host-scoped credential helper on init/clone/worktree |
+| `GRAFT_GIT_CREDENTIALS_MODE` | `baked` | `baked` (token in .git/config) or `env` (token via `GRAFT_GITHUB_TOKEN`) |
+| `GRAFT_GIT_CREDENTIALS_USERNAME` | `x-access-token` | Username sent to the helper (PATs ignore it; GitHub Apps need this) |
+| `GRAFT_GIT_CREDENTIALS_HOST` | *(derived)* | Override the credential host (e.g. `https://github.example.com`) |
 
 ## Data Transfer Objects
 

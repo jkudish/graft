@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Unified PAT/token support for git HTTPS auth.** `GITHUB_TOKEN` now drives both the GitHub API client *and* git subprocess credentials. After `Git::init`, `Git::clone`, and `Git::addWorktree`, Graft writes a host-scoped credential helper to the repo's `.git/config` so `fetch`/`pull`/`push` authenticate without any further setup.
+- New `git_credentials` config block under `platform.providers.github` with two modes: `baked` (default — token literal in `.git/config`, survives `config:cache`) and `env` (helper reads `${GRAFT_GITHUB_TOKEN}`, which Graft injects into every git subprocess via Symfony Process's explicit `$env` array).
+- Auto-derived credential host from `base_url` so GitHub Enterprise installs work without extra config.
+- New `Graft\Auth\GitCredentialHelper` value object encapsulating the helper string and env-injection logic.
+- README "Authentication" section documenting the two modes and the `config:cache` gotcha that motivated the feature.
+
+### Fixed
+
+- Git subprocesses spawned under Laravel's `config:cache` no longer fail with `Authentication failed`. `LoadEnvironmentVariables` is skipped after the cache is built, leaving `$_ENV`/`$_SERVER` empty — Symfony Process inherited from those, so a credential helper that read `$GITHUB_TOKEN` got nothing. Both `baked` and `env` modes now sidestep this.
+
 ## [0.2.0] - 2026-05-08
 
 ### Added
