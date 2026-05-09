@@ -12,6 +12,9 @@ trait ManagesRepository
 {
     abstract protected function installCredentials(string $repoPath): void;
 
+    /** @return array<string, string> */
+    abstract protected function credentialBootstrapEnv(): array;
+
     public function init(string $path, bool $bare = false): void
     {
         $args = ['init'];
@@ -36,7 +39,12 @@ trait ManagesRepository
         $args[] = $url;
         $args[] = $path;
 
-        $this->run(dirname($path), $args, timeout: 300);
+        // Inject the credential helper as ephemeral git config (via
+        // GIT_CONFIG_COUNT/KEY/VALUE env vars) so the clone itself can
+        // authenticate. The persistent helper in .git/config only takes
+        // effect AFTER the clone returns — without bootstrap, private repo
+        // clones fail before installCredentials even runs.
+        $this->run(dirname($path), $args, timeout: 300, extraEnv: $this->credentialBootstrapEnv());
 
         $this->installCredentials($path);
     }

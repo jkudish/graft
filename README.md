@@ -348,7 +348,7 @@ Graft uses a single token — `GITHUB_TOKEN` — for two distinct things:
 1. **The GitHub API client.** `Bearer` auth on every HTTP call — no surprises.
 2. **`git` subprocesses over HTTPS.** Anything that reaches a remote (`Git::clone`, `Git::fetch`, `Git::pull`, `Git::push`, `Git::addWorktree` on a private parent) needs the same token to authenticate.
 
-Graft handles both for you. When you call `Git::init`, `Git::clone`, or `Git::addWorktree`, it writes a host-scoped credential helper to the repo's `.git/config` so subsequent git operations authenticate without further setup.
+Graft handles both for you. When you call `Git::init`, `Git::clone`, or `Git::addWorktree`, it writes a host-scoped credential helper to the repo's `.git/config` so subsequent git operations authenticate without further setup. For `Git::clone` specifically, it also injects the helper as ephemeral git config (via the `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_*`/`GIT_CONFIG_VALUE_*` env vars git supports since 2.31) so the clone *itself* can authenticate — without that bootstrap, the persisted helper would only take effect after the clone has already needed credentials.
 
 ### The two modes
 
@@ -366,7 +366,7 @@ Graft handles both for you. When you call `Git::init`, `Git::clone`, or `Git::ad
 | `baked` | The literal token, inside a per-host credential helper snippet | Yes            | Production servers, especially behind `config:cache` (default) |
 | `env`   | A `${GRAFT_GITHUB_TOKEN}` placeholder; Graft injects the var into every git subprocess's env | No | Environments where you don't want secrets in `.git/config` |
 
-> **About `baked`-mode threat surface.** Token-at-rest in `.git/config` is roughly the same threat surface as `.env`, with one wrinkle: `.env` is typically `640` (or stricter) on Forge-style deploys, while `.git/config` is whatever umask gives you (usually `644`). On shared hosts where local users matter, lock down `.git/config` permissions or use `mode=env`.
+> **About `baked`-mode threat surface.** Token-at-rest in `.git/config` is roughly the same threat surface as `.env`, with one wrinkle: `.env` is typically `640` (or stricter) on Forge-style deploys, while `.git/config` is whatever your umask produces (often `644`, sometimes more permissive). On shared hosts where local users matter, lock down `.git/config` permissions or use `mode=env`.
 
 ### Hosts and GitHub Enterprise
 

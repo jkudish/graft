@@ -61,11 +61,19 @@ class ProcessGitManager implements GitManager
      * $_ENV/$_SERVER are empty and Process can't inherit the token from the
      * parent — so we hand it over directly.
      *
+     * `$extraEnv` is for one-off overrides like injecting `GIT_CONFIG_*` env
+     * vars during `git clone` (where the persisted helper isn't yet in
+     * `.git/config`). Keys in `$extraEnv` win over the helper's standing env.
+     *
      * @param  list<string>  $args
+     * @param  array<string, string>  $extraEnv
      */
-    protected function buildProcess(string $repoPath, array $args, ?int $timeout = null): Process
+    protected function buildProcess(string $repoPath, array $args, ?int $timeout = null, array $extraEnv = []): Process
     {
-        $env = $this->credentialHelper?->processEnv() ?? [];
+        $env = array_merge(
+            $this->credentialHelper?->processEnv() ?? [],
+            $extraEnv,
+        );
 
         $process = new Process(
             command: [$this->binary, ...$args],
@@ -81,10 +89,11 @@ class ProcessGitManager implements GitManager
      * Run a git command in the given repository path.
      *
      * @param  list<string>  $args
+     * @param  array<string, string>  $extraEnv
      */
-    protected function run(string $repoPath, array $args, ?int $timeout = null): Process
+    protected function run(string $repoPath, array $args, ?int $timeout = null, array $extraEnv = []): Process
     {
-        $process = $this->buildProcess($repoPath, $args, $timeout);
+        $process = $this->buildProcess($repoPath, $args, $timeout, $extraEnv);
         $process->run();
 
         if (! $process->isSuccessful()) {
@@ -98,10 +107,24 @@ class ProcessGitManager implements GitManager
      * Run a git command and return trimmed stdout.
      *
      * @param  list<string>  $args
+     * @param  array<string, string>  $extraEnv
      */
-    protected function runAndReturn(string $repoPath, array $args, ?int $timeout = null): string
+    protected function runAndReturn(string $repoPath, array $args, ?int $timeout = null, array $extraEnv = []): string
     {
-        return trim($this->run($repoPath, $args, $timeout)->getOutput());
+        return trim($this->run($repoPath, $args, $timeout, $extraEnv)->getOutput());
+    }
+
+    /**
+     * Env vars that bootstrap credential auth for a git invocation that
+     * doesn't yet have the persistent helper installed (notably `git clone`).
+     * Empty when no helper is configured, so callers can spread it
+     * unconditionally.
+     *
+     * @return array<string, string>
+     */
+    protected function credentialBootstrapEnv(): array
+    {
+        return $this->credentialHelper?->gitConfigEnvForBootstrap() ?? [];
     }
 
     /**
@@ -110,6 +133,9 @@ class ProcessGitManager implements GitManager
      * Called from init/clone/addWorktree. No-op when the helper is null,
      * disabled, or has no token — so apps without GITHUB_TOKEN see no
      * behavior change.
+     *
+     * Uses `--replace-all` so a pre-existing key with multiple values
+     * doesn't cause `git config` to error with "multiple values".
      *
      * Failures are logged rather than thrown: a failed credential install
      * shouldn't break an otherwise-successful init/clone, and the next
@@ -122,11 +148,12 @@ class ProcessGitManager implements GitManager
         }
 
         try {
-            $this->setConfig(
-                $repoPath,
+            $this->run($repoPath, [
+                'config',
+                '--replace-all',
                 $this->credentialHelper->configKey(),
                 $this->credentialHelper->configValue(),
-            );
+            ]);
         } catch (Throwable $e) {
             $this->logCredentialInstallFailure($repoPath, $e);
         }
@@ -137,11 +164,17 @@ class ProcessGitManager implements GitManager
         // Logging is best-effort: outside Laravel (e.g. raw unit tests with no
         // bound container) the Log facade can't resolve, so we degrade to
         // silent rather than mask the original failure with a logging crash.
+        //
+        // We deliberately do NOT log $e->getMessage(): ProcessException builds
+        // its message from the full git args, which include the credential
+        // helper value (and therefore the token literal in baked mode).
+        // Logging the exception class is enough to debug install failures
+        // without leaking the secret.
         try {
             if (function_exists('app') && app()->bound('log')) {
                 Log::warning('Graft: failed to install git credential helper', [
                     'repo' => $repoPath,
-                    'error' => $e->getMessage(),
+                    'error_class' => $e::class,
                 ]);
             }
         } catch (Throwable) {

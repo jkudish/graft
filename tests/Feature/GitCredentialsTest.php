@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Graft\Tests\Feature;
 
 use Graft\Auth\GitCredentialHelper;
+use Graft\Exceptions\ProcessException;
 use Graft\ProcessGitManager;
 use Graft\Tests\Concerns\CreatesTestRepositories;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\Process\Process;
 
 uses(CreatesTestRepositories::class);
@@ -21,12 +23,35 @@ class SpyingProcessGitManager extends ProcessGitManager
     /** @var list<array<string, string>|null> */
     public array $envHistory = [];
 
-    protected function buildProcess(string $repoPath, array $args, ?int $timeout = null): Process
+    protected function buildProcess(string $repoPath, array $args, ?int $timeout = null, array $extraEnv = []): Process
     {
-        $process = parent::buildProcess($repoPath, $args, $timeout);
+        $process = parent::buildProcess($repoPath, $args, $timeout, $extraEnv);
         $this->envHistory[] = $process->getEnv();
 
         return $process;
+    }
+}
+
+/**
+ * Forces installCredentials' inner run() to fail with a ProcessException
+ * whose message mirrors what fromProcess() emits — args-with-helper-value
+ * concatenated. Used to verify the token doesn't leak into Log calls.
+ */
+class InstallFailureManager extends ProcessGitManager
+{
+    public function tryInstall(string $repoPath): void
+    {
+        $this->installCredentials($repoPath);
+    }
+
+    protected function run(string $repoPath, array $args, ?int $timeout = null, array $extraEnv = []): Process
+    {
+        throw new ProcessException(
+            message: 'Git command failed: git '.implode(' ', $args),
+            command: 'git '.implode(' ', $args),
+            stderr: '',
+            code: 1,
+        );
     }
 }
 
@@ -179,4 +204,70 @@ test('init with bare repo writes credential to bare config', function () {
 
     $config = file_get_contents(gitConfigFile($this->repoPath, bare: true));
     expect($config)->toContain('ghp_bare_secret');
+});
+
+test('clone passes GIT_CONFIG_* bootstrap env so private clones authenticate', function () {
+    // The persisted helper in .git/config only takes effect AFTER clone returns;
+    // private clones need credentials DURING clone. We assert the bootstrap env
+    // vars are passed to the clone subprocess so git's GIT_CONFIG_COUNT/KEY/VALUE
+    // mechanism injects the helper for that one invocation.
+    $source = $this->createTestRepositoryWithCommit();
+    $helper = new GitCredentialHelper(token: 'ghp_bootstrap_secret');
+    $manager = new SpyingProcessGitManager(credentialHelper: $helper);
+
+    $manager->clone($source, $this->repoPath);
+
+    $cloneEnv = collect($manager->envHistory)
+        ->filter(fn ($env) => is_array($env) && isset($env['GIT_CONFIG_COUNT']))
+        ->first();
+
+    expect($cloneEnv)->not->toBeNull()
+        ->and($cloneEnv)
+        ->toHaveKey('GIT_CONFIG_COUNT', '1')
+        ->toHaveKey('GIT_CONFIG_KEY_0', 'credential.https://github.com.helper')
+        ->and($cloneEnv['GIT_CONFIG_VALUE_0'])->toContain('ghp_bootstrap_secret');
+});
+
+test('init does NOT pass bootstrap env (no network auth needed)', function () {
+    // init creates an empty local repo — no remote, no auth. We don't need
+    // (and shouldn't pass) credential bootstrap env there.
+    $helper = new GitCredentialHelper(token: 'ghp_init_no_boot');
+    $manager = new SpyingProcessGitManager(credentialHelper: $helper);
+
+    $manager->init($this->repoPath);
+
+    foreach ($manager->envHistory as $env) {
+        if (is_array($env)) {
+            expect($env)->not->toHaveKey('GIT_CONFIG_COUNT');
+        }
+    }
+});
+
+test('credential install failure does not leak the token via logs', function () {
+    // ProcessException::fromProcess builds its message from the full git
+    // args, which include the credential helper value (and the token
+    // literal in baked mode). If installCredentials logged $e->getMessage()
+    // on failure, the token would land in production logs. We force that
+    // exception path and assert the token never appears in the log payload.
+    $token = 'ghp_must_not_leak_'.uniqid();
+
+    $helper = new GitCredentialHelper(token: $token);
+    $manager = new InstallFailureManager(credentialHelper: $helper);
+
+    $captured = [];
+    Log::shouldReceive('warning')
+        ->once()
+        ->andReturnUsing(function ($message, $context) use (&$captured) {
+            $captured = ['message' => $message, 'context' => $context];
+        });
+
+    $manager->tryInstall($this->repoPath);
+
+    $serialized = json_encode($captured);
+    expect($serialized)
+        ->not->toContain($token)
+        ->and($captured['context'] ?? [])
+        ->not->toHaveKey('error')
+        ->and($captured['context'] ?? [])
+        ->toHaveKey('error_class', ProcessException::class);
 });

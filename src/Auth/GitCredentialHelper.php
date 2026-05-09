@@ -41,13 +41,17 @@ final class GitCredentialHelper
         if ($this->token !== null) {
             $this->assertSafeForCredentialProtocol('token', $this->token);
         }
+
+        if (! in_array($this->mode, [self::MODE_BAKED, self::MODE_ENV], true)) {
+            throw new InvalidArgumentException(
+                "GitCredentialHelper mode must be 'baked' or 'env', got '{$this->mode}'."
+            );
+        }
     }
 
     public function isEnabled(): bool
     {
-        return $this->enabled
-            && $this->hasToken()
-            && in_array($this->mode, [self::MODE_BAKED, self::MODE_ENV], true);
+        return $this->enabled && $this->hasToken();
     }
 
     public function hasToken(): bool
@@ -99,6 +103,36 @@ final class GitCredentialHelper
         return [self::ENV_VAR => (string) $this->token];
     }
 
+    /**
+     * Env vars that inject this helper as ephemeral git config for a single
+     * `git` invocation, via git's `GIT_CONFIG_COUNT` / `GIT_CONFIG_KEY_N` /
+     * `GIT_CONFIG_VALUE_N` mechanism (git 2.31+). This bootstraps auth for
+     * `git clone` itself — without it, the persisted `.git/config` helper
+     * only takes effect AFTER the clone has already succeeded, which fails
+     * for private repos.
+     *
+     * Passing via env (not `-c <key>=<value>` CLI args) keeps the value out
+     * of `ps`-style process listings; `/proc/<pid>/environ` is mode 600 on
+     * Linux.
+     *
+     * Returns `[]` when disabled or token-less so callers can unconditionally
+     * spread it into a Process env array.
+     *
+     * @return array<string, string>
+     */
+    public function gitConfigEnvForBootstrap(): array
+    {
+        if (! $this->isEnabled()) {
+            return [];
+        }
+
+        return [
+            'GIT_CONFIG_COUNT' => '1',
+            'GIT_CONFIG_KEY_0' => $this->configKey(),
+            'GIT_CONFIG_VALUE_0' => $this->configValue(),
+        ];
+    }
+
     public function resolvedHost(): string
     {
         if ($this->host !== null && $this->host !== '') {
@@ -129,6 +163,7 @@ final class GitCredentialHelper
 
         $host = $parsed['host'] ?? null;
         $scheme = $parsed['scheme'] ?? 'https';
+        $port = $parsed['port'] ?? null;
 
         if (! is_string($host) || $host === '') {
             return 'https://github.com';
@@ -136,7 +171,11 @@ final class GitCredentialHelper
 
         $host = preg_replace('/^api\./', '', $host) ?? $host;
 
-        return "{$scheme}://{$host}";
+        // Git's credential URL matching is port-aware, so a GHE install on a
+        // non-standard port needs the port in the helper key.
+        $portSuffix = is_int($port) ? ":{$port}" : '';
+
+        return "{$scheme}://{$host}{$portSuffix}";
     }
 
     /**
