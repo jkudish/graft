@@ -88,6 +88,7 @@ GITHUB_TOKEN=ghp_your_token_here
 - [Scoped Repository](#scoped-repository) — the recommended entry point
 - [Git Facade](#git-facade) — local repository operations
 - [GitHub Facade](#github-facade) — platform operations
+- [AI Tools](#ai-tools-laravel-ai-sdk) — ready-to-use tools for the Laravel AI SDK
 - [Active Objects](#active-objects) — methods on PRs and Issues
 - [Testing](#testing) — `Git::fake()` and `GitHub::fake()`
 - [Error Handling](#error-handling)
@@ -249,6 +250,69 @@ GitHub::removeLabel('owner/repo', 42, 'wip');
 GitHub::getRepository('owner/repo');
 // Repository { name, fullName, description, defaultBranch, private, url }
 ```
+
+## AI Tools (Laravel AI SDK)
+
+Graft ships nine ready-to-use tools for the [Laravel AI SDK](https://github.com/laravel/ai). Each tool implements both `Laravel\Ai\Contracts\Tool` (so the SDK can call it) and `Graft\Ai\Contracts\IdentifiableTool` (so you can discover, route, or expose it via MCP using a stable `category:action` ID).
+
+| Tool | `toolId()` | What it does |
+|---|---|---|
+| `GitLogTool` | `graft:git:log` | Recent commit history for a repo |
+| `GitStatusTool` | `graft:git:status` | Working tree status (staged / unstaged / untracked) |
+| `GitDiffTool` | `graft:git:diff` | Diff for the working tree or a single file |
+| `GitBranchesTool` | `graft:git:branches` | List branches and the current branch |
+| `GitHubListPrsTool` | `graft:github:list-prs` | List pull requests for `owner/repo` |
+| `GitHubGetIssueTool` | `graft:github:get-issue` | Fetch a single issue by number |
+| `GitHubCreateIssueTool` | `graft:github:create-issue` | Create a new issue |
+| `GitHubListIssuesTool` | `graft:github:list-issues` | List issues for `owner/repo` |
+| `GitHubPrReviewTool` | `graft:github:pr-review` | Add a review (approve, request changes, comment) |
+
+Register them with an Agent like any other Laravel AI tool:
+
+```php
+use Laravel\Ai\Agent;
+use Laravel\Ai\Promptable;
+use Graft\Ai\Tools\GitLogTool;
+use Graft\Ai\Tools\GitStatusTool;
+use Graft\Ai\Tools\GitHubListPrsTool;
+
+class ReleaseManager extends Agent
+{
+    use Promptable;
+
+    public function instructions(): string
+    {
+        return 'You help draft release notes from git history and open PRs.';
+    }
+
+    public function tools(): array
+    {
+        return [
+            GitLogTool::class,
+            GitStatusTool::class,
+            GitHubListPrsTool::class,
+        ];
+    }
+}
+```
+
+Or use them directly without an agent — they're plain classes:
+
+```php
+use Graft\Ai\Tools\GitLogTool;
+use Laravel\Ai\Tools\Request;
+
+$tool = new GitLogTool;
+$json = $tool->handle(new Request(['repo_path' => '/path/to/repo', 'limit' => 5]));
+```
+
+**Requires** the optional `laravel/ai` dependency:
+
+```bash
+composer require laravel/ai
+```
+
+The tools call into the `Git` and `GitHub` facades under the hood, so `Git::fake()` and `GitHub::fake()` work exactly the same way for testing them.
 
 ## Active Objects
 

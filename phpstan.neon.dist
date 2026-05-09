@@ -4,9 +4,4 @@ includes:
 parameters:
     paths:
         - src/
-    excludePaths:
-        # Host-app glue: references App\Ai\Contracts\IdentifiableTool from the
-        # consuming application. Skip from analysis until the interface is
-        # extracted into the package or the tools are moved out of src/.
-        - src/Ai/Tools/
     level: 8

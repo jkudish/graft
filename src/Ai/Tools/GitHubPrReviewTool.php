@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Graft\Ai\Tools;
 
-use App\Ai\Contracts\IdentifiableTool;
+use Graft\Ai\Contracts\IdentifiableTool;
 use Graft\Facades\GitHub;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;

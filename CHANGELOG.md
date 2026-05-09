@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-05-08
+
+### Added
+
+- `Graft\Ai\Contracts\IdentifiableTool` interface — gives tools a stable colon-notation identifier (e.g. `graft:git:log`) for discovery, MCP routing, and container tagging
+- AI tools are now publicly usable: `GitLogTool`, `GitStatusTool`, `GitDiffTool`, `GitBranchesTool`, `GitHubListPrsTool`, `GitHubGetIssueTool`, `GitHubCreateIssueTool`, `GitHubListIssuesTool`, `GitHubPrReviewTool`. Each implements both `Laravel\Ai\Contracts\Tool` and `Graft\Ai\Contracts\IdentifiableTool`
+- README section documenting the AI tools, their `toolId()` strings, and registration with `Laravel\Ai\Agent`
+- Test coverage for all 9 AI tools using `Git::fake()` / `GitHub::fake()` (52 new tests)
+
+### Changed
+
+- AI tools no longer reference the host application's `App\Ai\Contracts\IdentifiableTool` — the contract now lives entirely inside the package and works for any Packagist consumer
+- Removed the temporary PHPStan exclusion of `src/Ai/Tools/` (no longer needed)
+
 ## [0.1.2] - 2026-05-07
 
 ### Added

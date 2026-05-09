@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Graft\Ai\Tools;
 
-use App\Ai\Contracts\IdentifiableTool;
+use Graft\Ai\Contracts\IdentifiableTool;
 use Graft\Data\Git\Commit;
 use Graft\Facades\Git;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
