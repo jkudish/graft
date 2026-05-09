@@ -10,6 +10,8 @@ use Illuminate\Support\Collection;
 
 trait ManagesRepository
 {
+    abstract protected function installCredentials(string $repoPath): void;
+
     public function init(string $path, bool $bare = false): void
     {
         $args = ['init'];
@@ -20,6 +22,8 @@ trait ManagesRepository
 
         // init runs without a repo path context, use the parent dir
         $this->run(dirname($path), $args);
+
+        $this->installCredentials($path);
     }
 
     public function clone(string $url, string $path, ?string $branch = null): void
@@ -33,6 +37,8 @@ trait ManagesRepository
         $args[] = $path;
 
         $this->run(dirname($path), $args, timeout: 300);
+
+        $this->installCredentials($path);
     }
 
     public function isRepository(string $path): bool

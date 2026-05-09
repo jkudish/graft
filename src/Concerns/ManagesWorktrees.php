@@ -11,6 +11,8 @@ use Illuminate\Support\Collection;
 
 trait ManagesWorktrees
 {
+    abstract protected function installCredentials(string $repoPath): void;
+
     /**
      * Add a new worktree.
      *
@@ -48,6 +50,13 @@ trait ManagesWorktrees
             }
 
             $this->run($repoPath, $args);
+
+            // Worktrees inherit shared config from the main repo, so install
+            // the credential helper on the parent rather than the worktree.
+            // This also catches the case where the parent was cloned outside
+            // Graft (e.g. a manual `git clone` followed by Graft adding a
+            // worktree) and so wouldn't already have the helper.
+            $this->installCredentials($repoPath);
 
             // Find and return the worktree we just added
             // Use realpath to handle symlinks (e.g., /tmp -> /private/tmp on macOS)
