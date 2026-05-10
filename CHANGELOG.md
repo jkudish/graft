@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-09
+
 ### Added
 
 - **Unified PAT/token support for git HTTPS auth.** `GITHUB_TOKEN` now drives both the GitHub API client *and* git subprocess credentials. After `Git::init`, `Git::clone`, and `Git::addWorktree`, Graft writes a host-scoped credential helper to the repo's `.git/config` so `fetch`/`pull`/`push` authenticate without any further setup.
