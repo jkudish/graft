@@ -20,17 +20,18 @@
         "illuminate/http": "^11.0 || ^12.0 || ^13.0",
         "illuminate/support": "^11.0 || ^12.0 || ^13.0",
         "nesbot/carbon": "^3.0",
-        "symfony/process": "^7.0"
+        "symfony/process": "^7.0 || ^8.1"
     },
     "require-dev": {
         "larastan/larastan": "^3.0",
-        "laravel/ai": "^0.3",
+        "laravel/ai": "^0.10",
         "laravel/pint": "^1.0",
-        "orchestra/testbench": "^10.0",
-        "pestphp/pest": "^4.0"
+        "orchestra/testbench": "^11.0",
+        "pestphp/pest": "^5.0",
+        "pestphp/pest-plugin-agent": "^5.0"
     },
     "suggest": {
-        "laravel/ai": "Required to use the optional AI tools in Graft\\Ai\\Tools (^0.3)"
+        "laravel/ai": "Required to use the optional AI tools in Graft\\Ai\\Tools (^0.10)"
     },
     "autoload": {
         "psr-4": {
