@@ -57,7 +57,7 @@ trait ManagesCommits
 
         $fields = explode("\0", $output);
 
-        if ($fields !== [] && $fields[array_key_last($fields)] === '') {
+        if ($fields[array_key_last($fields)] === '') {
             array_pop($fields);
         }
 
