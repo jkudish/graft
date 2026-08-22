@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Graft\Auth;
 
+use Graft\Enums\Git\GitCredentialMode;
 use InvalidArgumentException;
+use SensitiveParameter;
 
 /**
  * Encapsulates per-repo git credential helper installation for HTTPS auth.
@@ -22,30 +24,29 @@ use InvalidArgumentException;
  */
 final class GitCredentialHelper
 {
-    public const MODE_BAKED = 'baked';
-
-    public const MODE_ENV = 'env';
-
     public const ENV_VAR = 'GRAFT_GITHUB_TOKEN';
 
+    private GitCredentialMode $mode;
+
     public function __construct(
+        #[SensitiveParameter]
         private ?string $token,
         private bool $enabled = true,
-        private string $mode = self::MODE_BAKED,
+        string|GitCredentialMode $mode = GitCredentialMode::Baked,
         private string $username = 'x-access-token',
         private ?string $host = null,
         private string $apiBaseUrl = 'https://api.github.com',
     ) {
+        $this->mode = $mode instanceof GitCredentialMode
+            ? $mode
+            : (GitCredentialMode::tryFrom($mode) ?? throw new InvalidArgumentException(
+                "GitCredentialHelper mode must be 'baked' or 'env', got '{$mode}'."
+            ));
+
         $this->assertSafeForCredentialProtocol('username', $this->username);
 
         if ($this->token !== null) {
             $this->assertSafeForCredentialProtocol('token', $this->token);
-        }
-
-        if (! in_array($this->mode, [self::MODE_BAKED, self::MODE_ENV], true)) {
-            throw new InvalidArgumentException(
-                "GitCredentialHelper mode must be 'baked' or 'env', got '{$this->mode}'."
-            );
         }
     }
 
@@ -59,7 +60,7 @@ final class GitCredentialHelper
         return $this->token !== null && $this->token !== '';
     }
 
-    public function mode(): string
+    public function mode(): GitCredentialMode
     {
         return $this->mode;
     }
@@ -77,7 +78,7 @@ final class GitCredentialHelper
         // the subshell at lookup time using the explicit env Graft passes to
         // every Symfony Process invocation.
         $username = $this->shellEscape($this->username);
-        $password = $this->mode === self::MODE_ENV
+        $password = $this->mode === GitCredentialMode::Env
             ? '${'.self::ENV_VAR.'}'
             : $this->shellEscape($this->token ?? '');
 
@@ -96,7 +97,7 @@ final class GitCredentialHelper
      */
     public function processEnv(): array
     {
-        if (! $this->isEnabled() || $this->mode !== self::MODE_ENV) {
+        if (! $this->isEnabled() || $this->mode !== GitCredentialMode::Env) {
             return [];
         }
 

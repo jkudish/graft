@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+use Graft\Data\Platform\IssueUpdate;
+use Graft\Data\Platform\PullRequestUpdate;
+use Graft\Enums\Platform\ItemState;
 use Graft\Platform\GitHubProvider;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
@@ -40,7 +43,7 @@ afterEach(function () {
     // Clean up issues (close them)
     foreach ($this->cleanupIssueNumbers as $number) {
         try {
-            $this->provider->updateIssue($this->repo, $number, ['state' => 'closed']);
+            $this->provider->updateIssue($this->repo, $number, new IssueUpdate(state: ItemState::Closed));
         } catch (Throwable) {
         }
     }
@@ -70,7 +73,7 @@ test('issue lifecycle: create, comment, labels, close', function () {
     $this->cleanupIssueNumbers[] = $issue->number;
 
     expect($issue->title)->toBe($title);
-    expect($issue->state)->toBe('open');
+    expect($issue->state)->toBe(ItemState::Open);
     expect($issue->body)->toBe('Test body');
 
     // Add comment
@@ -85,7 +88,7 @@ test('issue lifecycle: create, comment, labels, close', function () {
     $issue->close();
 
     $closed = $this->provider->getIssue($this->repo, $issue->number);
-    expect($closed->state)->toBe('closed');
+    expect($closed->state)->toBe(ItemState::Closed);
 });
 
 test('PR lifecycle: create branch, push, create PR, comment, close', function () {
@@ -128,7 +131,7 @@ test('PR lifecycle: create branch, push, create PR, comment, close', function ()
     );
     $this->cleanupPrNumbers[] = $pr->number;
 
-    expect($pr->state)->toBe('open');
+    expect($pr->state)->toBe(ItemState::Open);
     expect($pr->head)->toBe($branchName);
     expect($pr->base)->toBe($defaultBranch);
 
@@ -144,7 +147,7 @@ test('PR lifecycle: create branch, push, create PR, comment, close', function ()
     $pr->close();
 
     $closed = $this->provider->getPullRequest($this->repo, $pr->number);
-    expect($closed->state)->toBe('closed');
+    expect($closed->state)->toBe(ItemState::Closed);
 });
 
 test('CI status check', function () {
@@ -159,17 +162,17 @@ test('CI status check', function () {
     $status = $this->provider->getCiStatus($this->repo, $sha);
 
     // Fixture repo may or may not have CI — just verify it returns valid CiStatus
-    expect($status->state)->toBeIn(['pending', 'success', 'failure', 'error']);
+    expect($status->state->value)->toBeIn(['pending', 'success', 'failure', 'error']);
     expect($status->checkRuns)->toBeInstanceOf(Collection::class);
 });
 
 test('list pull requests', function () {
-    $prs = $this->provider->listPullRequests($this->repo, 'all');
+    $prs = $this->provider->listPullRequests($this->repo, ItemState::All);
     expect($prs)->toBeInstanceOf(Collection::class);
 });
 
 test('list issues', function () {
-    $issues = $this->provider->listIssues($this->repo, 'all');
+    $issues = $this->provider->listIssues($this->repo, ItemState::All);
     expect($issues)->toBeInstanceOf(Collection::class);
 });
 
@@ -234,10 +237,10 @@ test('update pull request details', function () {
     $this->cleanupPrNumbers[] = $pr->number;
 
     // Update PR
-    $updated = $pr->update([
-        'title' => "{$this->testPrefix}: Updated title",
-        'body' => 'Updated body',
-    ]);
+    $updated = $pr->update(new PullRequestUpdate(
+        title: "{$this->testPrefix}: Updated title",
+        body: 'Updated body',
+    ));
 
     expect($updated->title)->toBe("{$this->testPrefix}: Updated title");
     expect($updated->body)->toBe('Updated body');
@@ -264,10 +267,10 @@ test('update issue details', function () {
     $issue = $this->provider->createIssue($this->repo, $title, 'Original body');
     $this->cleanupIssueNumbers[] = $issue->number;
 
-    $updated = $issue->update([
-        'title' => "{$this->testPrefix}: Updated title",
-        'body' => 'Updated body',
-    ]);
+    $updated = $issue->update(new IssueUpdate(
+        title: "{$this->testPrefix}: Updated title",
+        body: 'Updated body',
+    ));
 
     expect($updated->title)->toBe("{$this->testPrefix}: Updated title");
     expect($updated->body)->toBe('Updated body');

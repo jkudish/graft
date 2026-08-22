@@ -6,6 +6,7 @@ namespace Graft\Ai\Tools;
 
 use Graft\Ai\Contracts\IdentifiableTool;
 use Graft\Data\Platform\Issue;
+use Graft\Enums\Platform\ItemState;
 use Graft\Facades\GitHub;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
@@ -14,6 +15,7 @@ use Throwable;
 
 class GitHubListIssuesTool implements IdentifiableTool, Tool
 {
+    #[\Override]
     public static function toolId(): string
     {
         return 'graft:github:list-issues';
@@ -22,6 +24,7 @@ class GitHubListIssuesTool implements IdentifiableTool, Tool
     /**
      * Get the description of the tool's purpose.
      */
+    #[\Override]
     public function description(): string
     {
         return 'List GitHub issues for a repository.';
@@ -30,27 +33,24 @@ class GitHubListIssuesTool implements IdentifiableTool, Tool
     /**
      * Execute the tool.
      */
+    #[\Override]
     public function handle(Request $request): string
     {
         /** @var string $repo */
         $repo = (string) $request->string('repo');
-        /** @var string $state */
-        $state = (string) $request->string('state');
-        if ($state === '') {
-            $state = 'open';
-        }
+        $state = ItemState::tryFrom((string) $request->string('state')) ?? ItemState::Open;
 
         try {
             $issues = GitHub::listIssues($repo, $state);
 
             if ($issues->isEmpty()) {
-                return "No {$state} issues found for {$repo}.";
+                return "No {$state->value} issues found for {$repo}.";
             }
 
             $formatted = $issues->map(fn (Issue $issue) => [
                 'number' => $issue->number,
                 'title' => $issue->title,
-                'state' => $issue->state,
+                'state' => $issue->state->value,
                 'author' => $issue->author,
                 'labels' => $issue->labels,
                 'url' => $issue->url,
@@ -72,6 +72,7 @@ class GitHubListIssuesTool implements IdentifiableTool, Tool
      *
      * @return array<string, mixed>
      */
+    #[\Override]
     public function schema(JsonSchema $schema): array
     {
         return [

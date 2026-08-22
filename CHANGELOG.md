@@ -7,6 +7,46 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking (0.x):** Platform APIs now use backed enums and typed update/review DTOs instead of magic strings and `array` payloads.
+
+  ```php
+  use Graft\Data\Platform\IssueUpdate;
+  use Graft\Data\Platform\PullRequestUpdate;
+  use Graft\Data\Platform\ReviewCommentInput;
+  use Graft\Enums\Platform\ItemState;
+  use Graft\Enums\Platform\MergeMethod;
+  use Graft\Enums\Platform\ReviewEvent;
+
+  GitHub::listPullRequests('owner/repo', ItemState::Open);
+  GitHub::updatePullRequest('owner/repo', 42, new PullRequestUpdate(title: 'New title'));
+  GitHub::mergePullRequest('owner/repo', 42, MergeMethod::Squash);
+  GitHub::updateIssue('owner/repo', 10, new IssueUpdate(state: ItemState::Closed));
+  GitHub::submitReview('owner/repo', 42, 'LGTM', ReviewEvent::Approve);
+  ```
+
+- `submitReview()` returns a `Review` (mapped via `mapReview()`). Inline comments are `ReviewCommentInput` objects.
+- `PullRequest` / `Issue` are constructed with `provider` + `repo`; `withProvider()` mutation is gone.
+- `PullRequest::$mergeable` is `?bool`. GitHub's `null` (not yet computed) is preserved — re-fetch if you need a boolean.
+- `GitCredentialHelper` takes `GitCredentialMode` (config `git_credentials.mode` is still a string, parsed at the boundary).
+- `GraftManager::platform()` accepts `Platform` or a string.
+
+### Removed
+
+- Unused `Graft\Data\Platform\Label` DTO. PRs and issues still expose label names as `list<string>`.
+- `GitCredentialHelper::MODE_BAKED` / `MODE_ENV` string constants.
+
+### Added
+
+- GitHub HTTP client sends `Accept: application/vnd.github+json`, pins `X-GitHub-Api-Version: 2022-11-28` (override with `platform.providers.github.api_version`), and identifies as `jkudish-graft`.
+- List and search endpoints paginate (`per_page=100`, follow `Link` rel=next, cap 10 pages). An optional `$limit` stops early. Search remains subject to GitHub's 1000-result cap.
+- Transient 429 / 502 / 503 / 504 and rate-limit 403 responses are retried, honoring `Retry-After` and `X-RateLimit-Reset`. 401 / 404 / 422 are not retried.
+
+### Fixed
+
+- `listIssues()` excludes items that have a `pull_request` key. `getIssue()` on a PR number stays GitHub-native.
+
 ## [0.3.0] - 2026-05-09
 
 ### Added

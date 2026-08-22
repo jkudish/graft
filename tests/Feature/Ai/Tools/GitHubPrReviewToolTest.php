@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Carbon\CarbonImmutable;
 use Graft\Ai\Tools\GitHubPrReviewTool;
 use Graft\Data\Platform\PullRequest;
+use Graft\Enums\Platform\ItemState;
 use Graft\Facades\GitHub;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Ai\Tools\Request;
@@ -33,7 +34,7 @@ it('returns formatted PR data on success', function () {
         number: 12,
         title: 'Refactor module',
         body: 'Big body',
-        state: 'open',
+        state: ItemState::Open,
         head: 'feature/refactor',
         base: 'main',
         url: 'https://github.com/owner/repo/pull/12',

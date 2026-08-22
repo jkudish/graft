@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Graft\Ai\Tools\GitHubCreateIssueTool;
 use Graft\Data\Platform\Issue;
+use Graft\Enums\Platform\ItemState;
 use Graft\Facades\GitHub;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Ai\Tools\Request;
@@ -32,7 +33,7 @@ it('creates an issue and returns formatted data', function () {
         number: 99,
         title: 'New issue',
         body: 'Description',
-        state: 'open',
+        state: ItemState::Open,
         url: 'https://github.com/owner/repo/issues/99',
         author: 'alice',
         labels: ['bug', 'priority'],
@@ -65,7 +66,7 @@ it('handles missing labels parameter without error', function () {
         number: 1,
         title: 't',
         body: 'b',
-        state: 'open',
+        state: ItemState::Open,
         url: 'https://github.com/owner/repo/issues/1',
         author: 'alice',
     ));

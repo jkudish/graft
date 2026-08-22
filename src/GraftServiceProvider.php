@@ -16,11 +16,13 @@ use Graft\Ai\Tools\GitStatusTool;
 use Graft\Auth\GitCredentialHelper;
 use Graft\Contracts\GitManager;
 use Graft\Contracts\PlatformProvider;
+use Graft\Enums\Git\GitCredentialMode;
 use Illuminate\Foundation\Console\AboutCommand;
 use Illuminate\Support\ServiceProvider;
 
 class GraftServiceProvider extends ServiceProvider
 {
+    #[\Override]
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/graft.php', 'graft');
@@ -39,6 +41,7 @@ class GraftServiceProvider extends ServiceProvider
         $this->app->singleton(PlatformProvider::class, fn ($app): PlatformProvider => $app->make(GraftManager::class)->platform());
     }
 
+    #[\Override]
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {
@@ -92,10 +95,12 @@ class GraftServiceProvider extends ServiceProvider
             ? $creds['host']
             : null;
 
+        $mode = is_string($creds['mode'] ?? null) ? $creds['mode'] : GitCredentialMode::Baked->value;
+
         return new GitCredentialHelper(
             token: $token,
             enabled: (bool) ($creds['enabled'] ?? true),
-            mode: is_string($creds['mode'] ?? null) ? $creds['mode'] : GitCredentialHelper::MODE_BAKED,
+            mode: $mode,
             username: is_string($creds['username'] ?? null) && $creds['username'] !== ''
                 ? $creds['username']
                 : 'x-access-token',

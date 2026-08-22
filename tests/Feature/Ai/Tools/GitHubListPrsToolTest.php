@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Carbon\CarbonImmutable;
 use Graft\Ai\Tools\GitHubListPrsTool;
 use Graft\Data\Platform\PullRequest;
+use Graft\Enums\Platform\ItemState;
 use Graft\Facades\GitHub;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Ai\Tools\Request;
@@ -34,7 +35,7 @@ it('returns formatted PR data on success', function () {
             number: 42,
             title: 'Add feature',
             body: 'Body',
-            state: 'open',
+            state: ItemState::Open,
             head: 'feature/foo',
             base: 'main',
             url: 'https://github.com/owner/repo/pull/42',
@@ -54,7 +55,7 @@ it('returns formatted PR data on success', function () {
         ->and($data['pull_requests'][0]['author'])->toBe('alice')
         ->and($data['pull_requests'][0]['url'])->toBe('https://github.com/owner/repo/pull/42');
 
-    $fake->assertCalled('listPullRequests', fn ($args) => $args[0] === 'owner/repo' && $args[1] === 'open');
+    $fake->assertCalled('listPullRequests', fn ($args) => $args[0] === 'owner/repo' && $args[1] === ItemState::Open);
 });
 
 it('returns a "no PRs" message when collection is empty', function () {

@@ -4,9 +4,15 @@ declare(strict_types=1);
 
 use Graft\Data\Platform\Comment;
 use Graft\Data\Platform\Issue;
+use Graft\Data\Platform\IssueUpdate;
 use Graft\Data\Platform\Notification;
 use Graft\Data\Platform\PullRequest;
+use Graft\Data\Platform\PullRequestUpdate;
 use Graft\Data\Platform\Repository;
+use Graft\Data\Platform\Review;
+use Graft\Data\Platform\ReviewCommentInput;
+use Graft\Enums\Platform\ItemState;
+use Graft\Enums\Platform\ReviewEvent;
 use Graft\Facades\GitHub;
 use Graft\Testing\FakePlatformProvider;
 use Illuminate\Support\Collection;
@@ -116,7 +122,7 @@ test('assertIssueCreated passes when issue is created', function () {
 
 test('assertIssueClosed passes when issue is closed', function () {
     $fake = new FakePlatformProvider;
-    $fake->updateIssue('owner/repo', 456, ['state' => 'closed']);
+    $fake->updateIssue('owner/repo', 456, new IssueUpdate(state: ItemState::Closed));
 
     $fake->assertIssueClosed(456);
 });
@@ -161,7 +167,7 @@ test('shouldReturn allows custom return values', function () {
         number: 999,
         title: 'Custom PR',
         body: 'Custom body',
-        state: 'open',
+        state: ItemState::Open,
         head: 'custom-head',
         base: 'custom-base',
         url: 'https://github.com/owner/repo/pull/999',
@@ -366,4 +372,31 @@ test('facade integration with GitHub fake', function () {
     GitHub::createPullRequest('owner/repo', 'Test PR', 'Body', 'head', 'base');
 
     $fake->assertPrCreated('Test PR');
+});
+
+test('updatePullRequest uses PullRequestUpdate DTO', function () {
+    $fake = new FakePlatformProvider;
+    $pr = $fake->updatePullRequest('owner/repo', 7, new PullRequestUpdate(title: 'Renamed', draft: true));
+
+    expect($pr->title)->toBe('Renamed')
+        ->and($pr->draft)->toBeTrue();
+
+    $fake->assertCalled('updatePullRequest', fn ($args) => $args[2] instanceof PullRequestUpdate && $args[2]->title === 'Renamed');
+});
+
+test('submitReview returns a Review', function () {
+    $fake = new FakePlatformProvider;
+    $review = $fake->submitReview(
+        'owner/repo',
+        3,
+        'LGTM',
+        ReviewEvent::Approve,
+        [new ReviewCommentInput(path: 'src/A.php', line: 1, body: 'nice')],
+    );
+
+    expect($review)->toBeInstanceOf(Review::class)
+        ->and($review->state)->toBe('APPROVED')
+        ->and($review->body)->toBe('LGTM');
+
+    $fake->assertCalled('submitReview', fn ($args) => $args[3] === ReviewEvent::Approve);
 });

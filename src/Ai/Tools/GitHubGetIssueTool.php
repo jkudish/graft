@@ -43,7 +43,7 @@ class GitHubGetIssueTool implements IdentifiableTool, Tool
                 'number' => $issue->number,
                 'title' => $issue->title,
                 'body' => $issue->body,
-                'state' => $issue->state,
+                'state' => $issue->state->value,
                 'url' => $issue->url,
                 'author' => $issue->author,
                 'labels' => $issue->labels,
