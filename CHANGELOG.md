@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Support policy:** PHP 8.4+ (including 8.5) and Laravel 12 or 13. Laravel 11 is no longer supported (security support ended 2026-03-12).
+- `illuminate/http` and `illuminate/support` now require `^12.0 || ^13.0`.
+- `orchestra/testbench` now allows `^10.0 || ^11.0` so each Laravel major can install its matching Testbench (10 = Laravel 12, 11 = Laravel 13).
+- Optional `laravel/ai` dependency bumped from `^0.10` to `^0.11`.
+- Test workflow now runs a PHP × Laravel matrix (`8.4`/`8.5` × `12`/`13`) instead of PHP-only.
+
 ## [0.3.0] - 2026-05-09
 
 ### Added
