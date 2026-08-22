@@ -6,6 +6,9 @@ use Graft\Data\Platform\IssueUpdate;
 use Graft\Data\Platform\PullRequestUpdate;
 use Graft\Enums\Platform\ItemState;
 use Graft\Platform\GitHubProvider;
+use Graft\Tests\TestCase;
+
+uses(TestCase::class);
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 

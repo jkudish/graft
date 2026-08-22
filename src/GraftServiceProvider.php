@@ -41,7 +41,6 @@ class GraftServiceProvider extends ServiceProvider
         $this->app->singleton(PlatformProvider::class, fn ($app): PlatformProvider => $app->make(GraftManager::class)->platform());
     }
 
-    #[\Override]
     public function boot(): void
     {
         if ($this->app->runningInConsole()) {

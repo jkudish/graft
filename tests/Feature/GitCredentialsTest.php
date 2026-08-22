@@ -9,10 +9,11 @@ use Graft\Enums\Git\GitCredentialMode;
 use Graft\Exceptions\ProcessException;
 use Graft\ProcessGitManager;
 use Graft\Tests\Concerns\CreatesTestRepositories;
+use Graft\Tests\TestCase;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\Process\Process;
 
-uses(CreatesTestRepositories::class);
+uses(TestCase::class, CreatesTestRepositories::class);
 
 /**
  * Captures the env Symfony Process is constructed with so tests can verify

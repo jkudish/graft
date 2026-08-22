@@ -17,7 +17,10 @@ use Graft\Enums\Platform\MergeMethod;
 use Graft\Enums\Platform\ReviewEvent;
 use Graft\Exceptions\PlatformException;
 use Graft\Platform\GitHubProvider;
+use Graft\Tests\TestCase;
 use Illuminate\Support\Facades\Http;
+
+uses(TestCase::class);
 
 beforeEach(function () {
     $this->provider = new GitHubProvider(token: 'test-token', baseUrl: 'https://api.github.com');
@@ -909,15 +912,16 @@ describe('HTTP contract', function () {
 
     test('merges two Link-paginated pages', function () {
         Http::fake(function ($request) {
+            $page = (int) ($request['page'] ?? 1);
             $payload = [
                 [
-                    'number' => str_contains($request->url(), 'page=2') ? 2 : 1,
-                    'title' => str_contains($request->url(), 'page=2') ? 'Second PR' : 'First PR',
+                    'number' => $page,
+                    'title' => $page === 2 ? 'Second PR' : 'First PR',
                     'body' => 'Description',
                     'state' => 'open',
                     'head' => ['ref' => 'feature'],
                     'base' => ['ref' => 'main'],
-                    'html_url' => 'https://github.com/owner/repo/pull/1',
+                    'html_url' => "https://github.com/owner/repo/pull/{$page}",
                     'user' => ['login' => 'jkudish'],
                     'draft' => false,
                     'mergeable' => true,
@@ -926,7 +930,7 @@ describe('HTTP contract', function () {
                 ],
             ];
 
-            $headers = str_contains($request->url(), 'page=2')
+            $headers = $page >= 2
                 ? []
                 : ['Link' => '<https://api.github.com/repos/owner/repo/pulls?page=2&per_page=100>; rel="next"'];
 

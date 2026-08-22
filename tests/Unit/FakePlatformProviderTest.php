@@ -15,6 +15,9 @@ use Graft\Enums\Platform\ItemState;
 use Graft\Enums\Platform\ReviewEvent;
 use Graft\Facades\GitHub;
 use Graft\Testing\FakePlatformProvider;
+use Graft\Tests\TestCase;
+
+uses(TestCase::class);
 use Illuminate\Support\Collection;
 use PHPUnit\Framework\AssertionFailedError;
 

@@ -6,6 +6,9 @@ use Graft\Contracts\GitManager;
 use Graft\Contracts\PlatformProvider;
 use Graft\Data\Git\Remote;
 use Graft\GraftManager;
+use Graft\Tests\TestCase;
+
+uses(TestCase::class);
 
 test('git returns the git manager', function () {
     $git = Mockery::mock(GitManager::class);

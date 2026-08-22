@@ -7,8 +7,11 @@ use Graft\Ai\Tools\GitHubGetIssueTool;
 use Graft\Data\Platform\Issue;
 use Graft\Enums\Platform\ItemState;
 use Graft\Facades\GitHub;
+use Graft\Tests\TestCase;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Ai\Tools\Request;
+
+uses(TestCase::class);
 
 beforeEach(function () {
     $this->tool = new GitHubGetIssueTool;
