@@ -142,6 +142,7 @@ Git::add($path);                                         // stage everything
 
 $commit = Git::commit($path, 'Fix the thing');
 // Commit { hash, shortHash, message, author, email, date, parents }
+Git::commit($path, 'agent change', noVerify: true);      // skip hooks
 
 Git::log($path, limit: 5);                               // Collection<Commit>
 Git::show($path);                                        // HEAD commit
@@ -155,6 +156,7 @@ Git::diff($path, staged: true);                          // string
 Git::fetch($path, prune: true);
 Git::pull($path, 'origin', 'main');
 Git::push($path, 'origin', 'main', setUpstream: true);
+Git::push($path, 'origin', 'main', forceWithLease: true);
 
 Git::remotes($path);                                     // Collection<Remote>
 Git::addRemote($path, 'upstream', 'https://github.com/org/repo.git');

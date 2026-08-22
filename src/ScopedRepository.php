@@ -101,9 +101,9 @@ class ScopedRepository
         $this->manager->pruneWorktrees($this->path);
     }
 
-    public function commit(string $message, bool $allowEmpty = false): Commit
+    public function commit(string $message, bool $allowEmpty = false, bool $noVerify = false): Commit
     {
-        return $this->manager->commit($this->path, $message, $allowEmpty);
+        return $this->manager->commit($this->path, $message, $allowEmpty, $noVerify);
     }
 
     /**
@@ -160,9 +160,9 @@ class ScopedRepository
         $this->manager->pull($this->path, $remote, $branch, $noRebase);
     }
 
-    public function push(?string $remote = null, ?string $branch = null, bool $force = false, bool $setUpstream = false): void
+    public function push(?string $remote = null, ?string $branch = null, bool $force = false, bool $setUpstream = false, bool $forceWithLease = false): void
     {
-        $this->manager->push($this->path, $remote, $branch, $force, $setUpstream);
+        $this->manager->push($this->path, $remote, $branch, $force, $setUpstream, $forceWithLease);
     }
 
     /**

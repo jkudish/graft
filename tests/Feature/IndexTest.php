@@ -119,6 +119,39 @@ it('detects unstaged modifications', function () {
         ->and($status->isClean())->toBeFalse();
 });
 
+it('parses status paths that contain spaces and pipes', function () {
+    $repo = $this->createTestRepository();
+
+    $this->createFileInRepo($repo, 'file with spaces.txt', 'content');
+    $this->createFileInRepo($repo, 'pipe|name.txt', 'content');
+
+    $status = $this->git->status($repo);
+
+    expect($status->untracked)->toContain('file with spaces.txt')
+        ->and($status->untracked)->toContain('pipe|name.txt');
+
+    $this->git->add($repo, ['file with spaces.txt', 'pipe|name.txt']);
+
+    $status = $this->git->status($repo);
+    expect($status->staged)->toContain('file with spaces.txt')
+        ->and($status->staged)->toContain('pipe|name.txt')
+        ->and($status->untracked)->toBeEmpty();
+});
+
+it('parses renamed files with spaces in the name', function () {
+    $repo = $this->createTestRepository();
+    $this->createFileInRepo($repo, 'old name.txt', 'content');
+    $this->git->add($repo, 'old name.txt');
+    $this->git->commit($repo, 'add file');
+
+    $this->runGit($repo, ['mv', 'old name.txt', 'new name.txt']);
+
+    $status = $this->git->status($repo);
+    expect($status->staged)->toContain('new name.txt')
+        ->and($status->unstaged)->toBeEmpty()
+        ->and($status->untracked)->toBeEmpty();
+});
+
 it('detects untracked files', function () {
     $repo = $this->createTestRepository();
 

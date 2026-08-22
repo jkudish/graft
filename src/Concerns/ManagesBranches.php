@@ -17,7 +17,7 @@ trait ManagesBranches
      */
     public function branches(string $repoPath, bool $remote = false): Collection
     {
-        $args = ['branch', '--format=%(refname:short)|%(HEAD)|%(upstream:short)|%(objectname:short)'];
+        $args = ['branch', '--format=%(refname:short)%00%(HEAD)%00%(upstream:short)%00%(objectname:short)'];
 
         if ($remote) {
             $args[] = '--remotes';
@@ -32,7 +32,7 @@ trait ManagesBranches
         return collect(explode("\n", $output))
             ->filter()
             ->map(function (string $line) use ($remote) {
-                $parts = explode('|', $line);
+                $parts = explode("\0", $line);
 
                 return new Branch(
                     name: $parts[0],

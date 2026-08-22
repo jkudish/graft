@@ -6,7 +6,6 @@ namespace Graft\Concerns;
 
 use Graft\Data\Git\MergeResult;
 use Graft\Exceptions\ProcessException;
-use Symfony\Component\Process\Process;
 
 trait ManagesMerging
 {
@@ -15,7 +14,7 @@ trait ManagesMerging
      */
     public function merge(string $repoPath, string $branch, ?string $message = null, bool $noFf = false): MergeResult
     {
-        $args = ['git', 'merge', $branch];
+        $args = ['merge', $branch];
 
         if ($noFf) {
             $args[] = '--no-ff';
@@ -26,8 +25,7 @@ trait ManagesMerging
             $args[] = $message;
         }
 
-        $process = new Process($args, $repoPath);
-        $process->run();
+        $process = $this->runAllowingFailure($repoPath, $args);
 
         $output = trim($process->getOutput());
         $errorOutput = trim($process->getErrorOutput());
@@ -45,7 +43,7 @@ trait ManagesMerging
         }
 
         // Other error - throw exception
-        throw ProcessException::fromProcess($process, array_slice($args, 1));
+        throw ProcessException::fromProcess($process, $args);
     }
 
     /**
@@ -114,9 +112,9 @@ trait ManagesMerging
     protected function getConflictedFiles(string $repoPath): array
     {
         try {
-            $output = $this->runAndReturn($repoPath, ['diff', '--name-only', '--diff-filter=U']);
+            $output = $this->run($repoPath, ['diff', '-z', '--name-only', '--diff-filter=U'])->getOutput();
 
-            return array_values(array_filter(explode("\n", $output)));
+            return array_values(array_filter(explode("\0", $output), fn (string $file): bool => $file !== ''));
         } catch (ProcessException) {
             // If diff fails, return empty array (no conflicts found)
             return [];

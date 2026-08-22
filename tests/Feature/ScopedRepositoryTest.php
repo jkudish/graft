@@ -3,6 +3,7 @@
 use Graft\GraftManager;
 use Graft\ProcessGitManager;
 use Graft\ScopedRepository;
+use Graft\Testing\FakeGitManager;
 use Graft\Tests\Concerns\CreatesTestRepositories;
 
 uses(CreatesTestRepositories::class);
@@ -20,6 +21,18 @@ test('proxies branch operations', function () {
 
     $repo->checkout('feature');
     expect($repo->currentBranch())->toBe('feature');
+});
+
+test('proxies commit noVerify and push forceWithLease', function () {
+    $fake = new FakeGitManager;
+    $graft = Mockery::mock(GraftManager::class);
+    $repo = new ScopedRepository($fake, $graft, '/tmp/test');
+
+    $repo->commit('Skip hooks', noVerify: true);
+    $repo->push('origin', 'main', forceWithLease: true);
+
+    $fake->assertCalled('commit', fn ($args) => $args[0] === '/tmp/test' && $args[3] === true);
+    $fake->assertCalled('push', fn ($args) => $args[0] === '/tmp/test' && $args[5] === true);
 });
 
 test('proxies commit operations', function () {

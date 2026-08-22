@@ -55,7 +55,7 @@ interface GitManager
     public function pruneWorktrees(string $repoPath): void;
 
     // Commits
-    public function commit(string $repoPath, string $message, bool $allowEmpty = false): Commit;
+    public function commit(string $repoPath, string $message, bool $allowEmpty = false, bool $noVerify = false): Commit;
 
     /**
      * @return Collection<int, Commit>
@@ -86,7 +86,7 @@ interface GitManager
 
     public function pull(string $repoPath, ?string $remote = null, ?string $branch = null, bool $noRebase = false): void;
 
-    public function push(string $repoPath, ?string $remote = null, ?string $branch = null, bool $force = false, bool $setUpstream = false): void;
+    public function push(string $repoPath, ?string $remote = null, ?string $branch = null, bool $force = false, bool $setUpstream = false, bool $forceWithLease = false): void;
 
     /**
      * @return Collection<int, Remote>
