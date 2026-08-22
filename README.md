@@ -19,7 +19,7 @@
 
 ---
 
-Graft is the missing git-and-platform layer for Laravel. It puts everything you'd reach for `exec('git ...')` or a hand-rolled GitHub HTTP client to do behind two clean facades — `Git` and `GitHub` — and returns typed, readonly DTOs instead of raw output or arrays.
+Graft is the missing git-and-platform layer for Laravel. It puts everything you'd reach for `exec('git ...')` or a hand-rolled GitHub HTTP client to do behind two clean facades — `Git` and `GitHub` — and returns typed DTOs instead of raw output or arrays. Git DTOs are readonly; `PullRequest` and `Issue` are active objects that carry their actions with them.
 
 It was built for the kind of app that needs to *do real work* in real repos: tools that orchestrate AI coding agents, dashboards that open and merge PRs on your behalf, internal automation that branches, commits, and ships. It scales from "create a tag" to "spin up a worktree, run a series of changes, open a PR, request review, watch CI, merge, and clean up" — without you ever leaving Laravel idioms.
 
@@ -55,15 +55,21 @@ $pr->addLabels(['enhancement']);
 - **`Git` facade** — branches, commits, index, remotes, merge, rebase, cherry-pick, tags, stash, worktrees, blame, clean.
 - **`GitHub` facade** — pull requests, issues, reviews, comments, CI status, labels, repository info.
 - **Scoped repository** — `Git::repo($path)` binds both surfaces to a single repo and auto-detects `owner/repo` from the origin remote.
-- **Typed DTOs** — `Branch`, `Commit`, `Status`, `MergeResult`, `Stash`, `Worktree`, `PullRequest`, `Issue`, `Review`, `CheckRun`, `CiStatus`, and more — all readonly, all with named properties.
+- **Typed DTOs** — Git values (`Branch`, `Commit`, `Status`, `MergeResult`, `Stash`, `Worktree`, …) are readonly. `PullRequest` and `Issue` are active objects (`withProvider()`, `$pr->merge()`, `$issue->close()`); other platform DTOs (`Review`, `CheckRun`, `CiStatus`, …) are readonly.
 - **Recording fakes** — `Git::fake()` and `GitHub::fake()` swap the real implementations for in-memory recorders with semantic assertions and configurable return values / exceptions.
 - **Errors with context** — `MergeConflictException` exposes the conflicting files; `PlatformException` exposes the status code and the response body.
 
 ## Requirements
 
-- PHP 8.2+
+- PHP 8.4+
 - Laravel 11, 12, or 13
-- `git` binary on `PATH`
+- `git` 2.31+ on `PATH` (required for the `GIT_CONFIG_*` clone bootstrap — see [Authentication](#authentication))
+
+Only **GitHub** is implemented as a platform provider. `GRAFT_PLATFORM` defaults to `github`; other values are not supported.
+
+Composer still allows Laravel 11–13. CI runs the test suite on PHP 8.4 and 8.5.
+
+**`config:cache`:** after Laravel caches config, `$_ENV` is empty and a naive git credential helper that reads `$GITHUB_TOKEN` will fail. Graft’s `baked` and `env` modes sidestep this — see [The `config:cache` gotcha](#the-configcache-gotcha).
 
 ## Installation
 
@@ -268,7 +274,7 @@ Graft ships nine ready-to-use tools for the [Laravel AI SDK](https://github.com/
 | `GitHubGetIssueTool` | `graft:github:get-issue` | Fetch a single issue by number |
 | `GitHubCreateIssueTool` | `graft:github:create-issue` | Create a new issue |
 | `GitHubListIssuesTool` | `graft:github:list-issues` | List issues for `owner/repo` |
-| `GitHubPrReviewTool` | `graft:github:pr-review` | Add a review (approve, request changes, comment) |
+| `GitHubPrReviewTool` | `graft:github:pr-review` | Fetch a pull request by number (read-only; does not submit a review) |
 
 Register them with an Agent like any other Laravel AI tool:
 
@@ -342,6 +348,8 @@ $issue->addLabels(['resolved']);
 ```
 
 ## Authentication
+
+Requires **git 2.31+** (listed under [Requirements](#requirements)) for the clone bootstrap described below.
 
 Graft uses a single token — `GITHUB_TOKEN` — for two distinct things:
 
@@ -502,7 +510,7 @@ try {
 
 ## Configuration
 
-Published to `config/graft.php`:
+Published to `config/graft.php`. Only the `github` provider is implemented.
 
 ```php
 return [
@@ -510,7 +518,7 @@ return [
     'timeout'    => env('GRAFT_TIMEOUT', 60),
 
     'platform' => [
-        'default'   => env('GRAFT_PLATFORM', 'github'),
+        'default'   => env('GRAFT_PLATFORM', 'github'), // only "github" is implemented
         'providers' => [
             'github' => [
                 'token'    => env('GITHUB_TOKEN'),
@@ -533,18 +541,19 @@ return [
 | `GITHUB_TOKEN` | *(required)* | GitHub personal access token (used for both API and git HTTPS auth) |
 | `GRAFT_GIT_BINARY` | `git` | Path to the git binary |
 | `GRAFT_TIMEOUT` | `60` | Timeout in seconds for git commands |
-| `GRAFT_PLATFORM` | `github` | Default platform provider |
+| `GRAFT_PLATFORM` | `github` | Default platform provider. Only GitHub is implemented; other values will fail. |
 | `GITHUB_API_URL` | `https://api.github.com` | GitHub API base URL (for GitHub Enterprise) |
 | `GRAFT_GIT_CREDENTIALS_ENABLED` | `true` | Auto-install a host-scoped credential helper on init/clone/worktree |
 | `GRAFT_GIT_CREDENTIALS_MODE` | `baked` | `baked` (token in .git/config) or `env` (token via `GRAFT_GITHUB_TOKEN`) |
 | `GRAFT_GIT_CREDENTIALS_USERNAME` | `x-access-token` | Username sent to the helper (PATs ignore it; GitHub Apps need this) |
 | `GRAFT_GIT_CREDENTIALS_HOST` | *(derived)* | Override the credential host (e.g. `https://github.example.com`) |
+| `GRAFT_TEST_REPO` | `jkudish/graft-test-fixture` | Fixture repo for local `composer test:integration` (not used by CI) |
 
 ## Data Transfer Objects
 
-All DTOs are readonly classes with typed properties.
+Git DTOs are readonly classes with typed properties. `PullRequest` and `Issue` are active objects: their data properties are readonly, but `withProvider()` attaches a provider so you can call `$pr->merge()`, `$issue->close()`, and the other action methods.
 
-**Git:** `Branch`, `Commit`, `Status`, `Remote`, `MergeResult`, `Stash`, `Worktree`, `Blame`
+**Git (readonly):** `Branch`, `Commit`, `Status`, `Remote`, `MergeResult`, `Stash`, `Worktree`, `Blame`
 
 **Platform:** `PullRequest` (active), `Issue` (active), `Comment`, `Review`, `CheckRun`, `CiStatus`, `Repository`
 
@@ -553,11 +562,15 @@ All DTOs are readonly classes with typed properties.
 PRs welcome. Run the suite before pushing:
 
 ```bash
-composer test         # unit + feature
-composer test:all     # includes integration (requires real git)
-composer phpstan      # level 8
-composer lint         # Pint
+composer test              # unit + feature (what CI runs)
+composer test:integration  # integration group — see below
+composer test:all          # pest without a group filter (`phpunit.xml.dist` still excludes integration)
+composer phpstan           # level 8
+composer lint              # Pint (writes fixes)
+composer lint:check        # Pint --test (what CI runs)
 ```
+
+`composer test:integration` needs a real `git` binary on `PATH`. The GitHub integration tests also need `GITHUB_TOKEN` and optionally `GRAFT_TEST_REPO` (defaults to `jkudish/graft-test-fixture`). Integration tests are excluded from default CI — do not add them to the workflows.
 
 ## License
 

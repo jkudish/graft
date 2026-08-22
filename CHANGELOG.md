@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **PHP 8.4 is now required** (`composer.json` `php: ^8.4`). CI runs on PHP 8.4 and 8.5. The [0.1.2](#012---2026-05-07) entry documenting CI on 8.2/8.3/8.4 is historical.
+
+### Fixed
+
+- README, skill, and config now match implemented behavior: PHP 8.4+, git 2.31+ (required for the `GIT_CONFIG_*` clone bootstrap), Git DTOs are readonly while `PullRequest`/`Issue` are active objects, `GitHubPrReviewTool` fetches a PR rather than adding a review, and GitLab / `GRAFT_PLATFORM` pluggability are documented as not implemented.
+
 ## [0.3.0] - 2026-05-09
 
 ### Added

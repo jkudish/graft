@@ -26,6 +26,11 @@ return [
     |--------------------------------------------------------------------------
     | Platform Providers
     |--------------------------------------------------------------------------
+    |
+    | Only GitHub is implemented. GRAFT_PLATFORM must be "github" (the default).
+    | GitLab and other forges are not supported — there is no GitLabProvider,
+    | and createProvider() only instantiates "github".
+    |
     */
 
     'platform' => [
@@ -62,10 +67,8 @@ return [
                     'host' => env('GRAFT_GIT_CREDENTIALS_HOST'),
                 ],
             ],
-            // 'gitlab' => [
-            //     'token' => env('GITLAB_TOKEN'),
-            //     'base_url' => env('GITLAB_API_URL', 'https://gitlab.com/api/v4'),
-            // ],
+            // GitLab is not implemented. Do not add a gitlab provider block
+            // expecting it to work — unsupported names throw from createProvider().
         ],
     ],
 
