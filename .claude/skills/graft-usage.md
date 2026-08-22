@@ -1,6 +1,7 @@
 ---
-description: "Git and GitHub operations via planmode/graft. Activates when working with git commands, branches, PRs, issues, CI checks, or repository automation in Laravel."
+description: "Git and GitHub operations via jkudish/graft. Activates when working with git commands, branches, PRs, issues, CI checks, or repository automation in Laravel."
 triggers:
+  - graft
   - git
   - github
   - branch
@@ -162,7 +163,7 @@ $fake->assertNothingCalled();
 - Scoped repo detects `owner/repo` from the origin remote — SSH and HTTPS formats both work. If origin is missing, platform calls will fail.
 - `MergeConflictException` is thrown on merge conflicts. Always handle it when calling `merge()`, `rebase()`, or `cherryPick()`.
 - All git DTOs are readonly. `PullRequest` and `Issue` are active objects with action methods; other DTOs are plain data.
-- `clone` is a valid method name in PHP 8.2+ (it was reserved as a keyword but works as a method on objects/facades).
+- `clone` is a valid method name in PHP (it was reserved as a keyword but works as a method on objects/facades).
 
 ## Exception Hierarchy
 

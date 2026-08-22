@@ -47,9 +47,11 @@ class GraftManager
 
         $host = $this->extractHost($origin->fetchUrl);
 
+        // Only GitHub is implemented. gitlab.com (and any other host) falls
+        // through to the default provider, which is also GitHub — there is
+        // no GitLabProvider yet.
         return match (true) {
             str_contains($host, 'github') => $this->platform('github'),
-            // str_contains($host, 'gitlab') => $this->platform('gitlab'),
             default => $this->platform(),
         };
     }
