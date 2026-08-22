@@ -3,6 +3,9 @@
 declare(strict_types=1);
 
 use Graft\Ai\AllowedPath;
+use Graft\Tests\TestCase;
+
+uses(TestCase::class);
 
 it('resolves an allowlisted root and its subdirectory', function () {
     $root = sys_get_temp_dir().'/graft-allowed-'.uniqid();

@@ -6,8 +6,11 @@ use Carbon\CarbonImmutable;
 use Graft\Ai\Tools\GitHubListPrsTool;
 use Graft\Data\Platform\PullRequest;
 use Graft\Facades\GitHub;
+use Graft\Tests\TestCase;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Ai\Tools\Request;
+
+uses(TestCase::class);
 
 beforeEach(function () {
     $this->tool = new GitHubListPrsTool;

@@ -8,7 +8,10 @@ use Graft\Data\Git\Status;
 use Graft\Data\Platform\Issue;
 use Graft\Facades\Git;
 use Graft\Facades\GitHub;
+use Graft\Tests\TestCase;
 use Laravel\Ai\Tools\Request;
+
+uses(TestCase::class);
 
 it('allows a repo_path that equals or sits inside an allowlisted root', function () {
     $root = sys_get_temp_dir().'/graft-ai-allow-'.uniqid();

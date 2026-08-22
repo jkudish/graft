@@ -3,6 +3,9 @@
 declare(strict_types=1);
 
 use Graft\Ai\AllowedRepository;
+use Graft\Tests\TestCase;
+
+uses(TestCase::class);
 
 it('allows every repository when the allowlist is empty', function () {
     config(['graft.ai.allowed_repositories' => []]);

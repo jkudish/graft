@@ -5,9 +5,12 @@ declare(strict_types=1);
 use Graft\Ai\Tools\GitHubCreateIssueTool;
 use Graft\Data\Platform\Issue;
 use Graft\Facades\GitHub;
+use Graft\Tests\TestCase;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Illuminate\JsonSchema\Types\ArrayType;
 use Laravel\Ai\Tools\Request;
+
+uses(TestCase::class);
 
 beforeEach(function () {
     $this->tool = new GitHubCreateIssueTool;

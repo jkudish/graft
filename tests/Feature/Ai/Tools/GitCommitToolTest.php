@@ -6,8 +6,11 @@ use Carbon\CarbonImmutable;
 use Graft\Ai\Tools\GitCommitTool;
 use Graft\Data\Git\Commit;
 use Graft\Facades\Git;
+use Graft\Tests\TestCase;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Ai\Tools\Request;
+
+uses(TestCase::class);
 
 beforeEach(function () {
     $this->tool = new GitCommitTool;

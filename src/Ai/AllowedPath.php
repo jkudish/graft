@@ -150,7 +150,7 @@ class AllowedPath
             }
         }
 
-        return array_values($roots);
+        return $roots;
     }
 
     private static function allowBasePath(): bool

@@ -55,7 +55,7 @@ class GraftServiceProvider extends ServiceProvider
             ], 'graft-config');
         }
 
-        if (class_exists(Tool::class)) {
+        if (interface_exists(Tool::class)) {
             $this->app->tag([
                 GitStatusTool::class,
                 GitDiffTool::class,
