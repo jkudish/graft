@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Graft\Ai\Tools;
 
+use Graft\Ai\AllowedPath;
 use Graft\Ai\Contracts\IdentifiableTool;
+use Graft\Ai\ToolResponse;
 use Graft\Data\Git\Branch;
 use Graft\Facades\Git;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -32,16 +34,12 @@ class GitBranchesTool implements IdentifiableTool, Tool
      */
     public function handle(Request $request): string
     {
-        /** @var string $repoPath */
-        $repoPath = (string) $request->string('repo_path');
-        if ($repoPath === '') {
-            $repoPath = base_path();
-        }
-
-        /** @var bool $remote */
-        $remote = $request->boolean('remote', false);
-
         try {
+            $repoPath = AllowedPath::resolve((string) $request->string('repo_path'));
+
+            /** @var bool $remote */
+            $remote = $request->boolean('remote', false);
+
             $branches = Git::branches($repoPath, $remote);
 
             if ($branches->isEmpty()) {
@@ -55,14 +53,12 @@ class GitBranchesTool implements IdentifiableTool, Tool
                 'upstream' => $branch->upstream,
             ])->all();
 
-            $data = [
+            return ToolResponse::json([
                 'count' => count($formatted),
                 'branches' => $formatted,
-            ];
-
-            return json_encode($data, JSON_PRETTY_PRINT) ?: 'No data.';
+            ]);
         } catch (Throwable $e) {
-            return "Error listing branches: {$e->getMessage()}";
+            return ToolResponse::error("Error listing branches: {$e->getMessage()}");
         }
     }
 

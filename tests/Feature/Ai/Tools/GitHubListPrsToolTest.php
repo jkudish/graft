@@ -6,8 +6,11 @@ use Carbon\CarbonImmutable;
 use Graft\Ai\Tools\GitHubListPrsTool;
 use Graft\Data\Platform\PullRequest;
 use Graft\Facades\GitHub;
+use Graft\Tests\TestCase;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Ai\Tools\Request;
+
+uses(TestCase::class);
 
 beforeEach(function () {
     $this->tool = new GitHubListPrsTool;
@@ -65,10 +68,10 @@ it('returns a "no PRs" message when collection is empty', function () {
     expect($output)->toContain('No open pull requests found for owner/repo');
 });
 
-it('returns an Error message when the underlying call throws', function () {
+it('returns a structured error when the underlying call throws', function () {
     GitHub::fake()->shouldThrow('listPullRequests', new RuntimeException('boom'));
 
     $output = $this->tool->handle(new Request(['repo' => 'owner/repo']));
 
-    expect($output)->toStartWith('Error');
+    expect(decodeToolError($output)['message'])->toContain('boom');
 });

@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Graft\Ai\Tools;
 
+use Graft\Ai\AllowedPath;
 use Graft\Ai\Contracts\IdentifiableTool;
+use Graft\Ai\ToolResponse;
 use Graft\Facades\Git;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
@@ -31,25 +33,18 @@ class GitStatusTool implements IdentifiableTool, Tool
      */
     public function handle(Request $request): string
     {
-        /** @var string $repoPath */
-        $repoPath = (string) $request->string('repo_path');
-        if ($repoPath === '') {
-            $repoPath = base_path();
-        }
-
         try {
+            $repoPath = AllowedPath::resolve((string) $request->string('repo_path'));
             $status = Git::status($repoPath);
 
-            $data = [
+            return ToolResponse::json([
                 'is_clean' => $status->isClean(),
                 'staged' => $status->staged,
                 'unstaged' => $status->unstaged,
                 'untracked' => $status->untracked,
-            ];
-
-            return json_encode($data, JSON_PRETTY_PRINT) ?: 'No data.';
+            ]);
         } catch (Throwable $e) {
-            return "Error getting git status: {$e->getMessage()}";
+            return ToolResponse::error("Error getting git status: {$e->getMessage()}");
         }
     }
 

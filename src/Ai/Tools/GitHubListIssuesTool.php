@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Graft\Ai\Tools;
 
+use Graft\Ai\AllowedRepository;
 use Graft\Ai\Contracts\IdentifiableTool;
+use Graft\Ai\ToolResponse;
 use Graft\Data\Platform\Issue;
 use Graft\Facades\GitHub;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -32,15 +34,16 @@ class GitHubListIssuesTool implements IdentifiableTool, Tool
      */
     public function handle(Request $request): string
     {
-        /** @var string $repo */
-        $repo = (string) $request->string('repo');
-        /** @var string $state */
-        $state = (string) $request->string('state');
-        if ($state === '') {
-            $state = 'open';
-        }
-
         try {
+            $repo = (string) $request->string('repo');
+            AllowedRepository::assertAllowed($repo);
+
+            /** @var string $state */
+            $state = (string) $request->string('state');
+            if ($state === '') {
+                $state = 'open';
+            }
+
             $issues = GitHub::listIssues($repo, $state);
 
             if ($issues->isEmpty()) {
@@ -56,14 +59,12 @@ class GitHubListIssuesTool implements IdentifiableTool, Tool
                 'url' => $issue->url,
             ])->all();
 
-            $data = [
+            return ToolResponse::json([
                 'count' => count($formatted),
                 'issues' => $formatted,
-            ];
-
-            return json_encode($data, JSON_PRETTY_PRINT) ?: 'No data.';
+            ]);
         } catch (Throwable $e) {
-            return "Error listing issues: {$e->getMessage()}";
+            return ToolResponse::error("Error listing issues: {$e->getMessage()}");
         }
     }
 

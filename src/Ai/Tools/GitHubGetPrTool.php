@@ -4,18 +4,20 @@ declare(strict_types=1);
 
 namespace Graft\Ai\Tools;
 
+use Graft\Ai\AllowedRepository;
 use Graft\Ai\Contracts\IdentifiableTool;
+use Graft\Ai\ToolResponse;
 use Graft\Facades\GitHub;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 use Throwable;
 
-class GitHubPrReviewTool implements IdentifiableTool, Tool
+class GitHubGetPrTool implements IdentifiableTool, Tool
 {
     public static function toolId(): string
     {
-        return 'graft:github:pr-review';
+        return 'graft:github:get-pr';
     }
 
     /**
@@ -23,7 +25,7 @@ class GitHubPrReviewTool implements IdentifiableTool, Tool
      */
     public function description(): string
     {
-        return 'Get details of a GitHub pull request for review.';
+        return 'Get details of a GitHub pull request.';
     }
 
     /**
@@ -31,15 +33,16 @@ class GitHubPrReviewTool implements IdentifiableTool, Tool
      */
     public function handle(Request $request): string
     {
-        /** @var string $repo */
-        $repo = (string) $request->string('repo');
         /** @var int $number */
         $number = $request->integer('number');
 
         try {
+            $repo = (string) $request->string('repo');
+            AllowedRepository::assertAllowed($repo);
+
             $pr = GitHub::getPullRequest($repo, $number);
 
-            $data = [
+            return ToolResponse::json([
                 'number' => $pr->number,
                 'title' => $pr->title,
                 'body' => $pr->body,
@@ -55,11 +58,9 @@ class GitHubPrReviewTool implements IdentifiableTool, Tool
                 'created_at' => $pr->createdAt?->toIso8601String(),
                 'updated_at' => $pr->updatedAt?->toIso8601String(),
                 'merged_at' => $pr->mergedAt?->toIso8601String(),
-            ];
-
-            return json_encode($data, JSON_PRETTY_PRINT) ?: 'No data.';
+            ]);
         } catch (Throwable $e) {
-            return "Error fetching PR #{$number}: {$e->getMessage()}";
+            return ToolResponse::error("Error fetching PR #{$number}: {$e->getMessage()}");
         }
     }
 

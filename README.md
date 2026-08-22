@@ -256,7 +256,9 @@ GitHub::getRepository('owner/repo');
 
 ## AI Tools (Laravel AI SDK)
 
-Graft ships nine ready-to-use tools for the [Laravel AI SDK](https://github.com/laravel/ai). Each tool implements both `Laravel\Ai\Contracts\Tool` (so the SDK can call it) and `Graft\Ai\Contracts\IdentifiableTool` (so you can discover, route, or expose it via MCP using a stable `category:action` ID).
+Graft ships ready-to-use tools for the [Laravel AI SDK](https://github.com/laravel/ai). Each tool implements both `Laravel\Ai\Contracts\Tool` (so the SDK can call it) and `Graft\Ai\Contracts\IdentifiableTool` (so you can discover, route, or expose it via MCP using a stable `category:action` ID).
+
+Failures return structured JSON (`{"error": true, "message": "..."}`) so the SDK can distinguish an error from empty data.
 
 | Tool | `toolId()` | What it does |
 |---|---|---|
@@ -264,11 +266,20 @@ Graft ships nine ready-to-use tools for the [Laravel AI SDK](https://github.com/
 | `GitStatusTool` | `graft:git:status` | Working tree status (staged / unstaged / untracked) |
 | `GitDiffTool` | `graft:git:diff` | Diff for the working tree or a single file |
 | `GitBranchesTool` | `graft:git:branches` | List branches and the current branch |
+| `GitCheckoutTool` | `graft:git:checkout` | Check out a branch, optionally creating it |
+| `GitCommitTool` | `graft:git:commit` | Stage paths and create a commit |
+| `GitPushTool` | `graft:git:push` | Push a branch (`remote`, `set_upstream`, `force`) |
 | `GitHubListPrsTool` | `graft:github:list-prs` | List pull requests for `owner/repo` |
+| `GitHubGetPrTool` | `graft:github:get-pr` | Fetch a single pull request by number |
+| `GitHubCreatePrTool` | `graft:github:create-pr` | Create a pull request |
+| `GitHubGetCiStatusTool` | `graft:github:get-ci-status` | CI status for a ref or pull request number |
+| `GitHubMergePrTool` | `graft:github:merge-pr` | Merge a pull request (`squash`, `merge`, or `rebase`) |
+| `GitHubSubmitReviewTool` | `graft:github:submit-review` | Submit a review (approve, request changes, comment) |
 | `GitHubGetIssueTool` | `graft:github:get-issue` | Fetch a single issue by number |
 | `GitHubCreateIssueTool` | `graft:github:create-issue` | Create a new issue |
 | `GitHubListIssuesTool` | `graft:github:list-issues` | List issues for `owner/repo` |
-| `GitHubPrReviewTool` | `graft:github:pr-review` | Add a review (approve, request changes, comment) |
+
+`repo_path` is resolved with `realpath` and must equal or sit inside an allowlisted root (`GRAFT_AI_ALLOWED_REPOS`). With an empty allowlist, only `base_path()` is permitted when `GRAFT_AI_ALLOW_BASE_PATH=true` (the default). Set that flag to `false` to fail closed. GitHub `owner/repo` tools can optionally be restricted with `GRAFT_AI_ALLOWED_REPOSITORIES` (empty = allow all).
 
 Register them with an Agent like any other Laravel AI tool:
 
@@ -525,6 +536,12 @@ return [
             ],
         ],
     ],
+
+    'ai' => [
+        'allowed_repos' => array_values(array_filter(array_map('trim', explode(',', (string) env('GRAFT_AI_ALLOWED_REPOS', ''))))),
+        'allow_base_path' => env('GRAFT_AI_ALLOW_BASE_PATH', true),
+        'allowed_repositories' => array_values(array_filter(array_map('trim', explode(',', (string) env('GRAFT_AI_ALLOWED_REPOSITORIES', ''))))),
+    ],
 ];
 ```
 
@@ -539,6 +556,9 @@ return [
 | `GRAFT_GIT_CREDENTIALS_MODE` | `baked` | `baked` (token in .git/config) or `env` (token via `GRAFT_GITHUB_TOKEN`) |
 | `GRAFT_GIT_CREDENTIALS_USERNAME` | `x-access-token` | Username sent to the helper (PATs ignore it; GitHub Apps need this) |
 | `GRAFT_GIT_CREDENTIALS_HOST` | *(derived)* | Override the credential host (e.g. `https://github.example.com`) |
+| `GRAFT_AI_ALLOWED_REPOS` | *(empty)* | Comma-separated filesystem roots AI git tools may use |
+| `GRAFT_AI_ALLOW_BASE_PATH` | `true` | When the repo allowlist is empty, permit only `base_path()` |
+| `GRAFT_AI_ALLOWED_REPOSITORIES` | *(empty)* | Comma-separated `owner/repo` values for GitHub tools; empty = allow all |
 
 ## Data Transfer Objects
 

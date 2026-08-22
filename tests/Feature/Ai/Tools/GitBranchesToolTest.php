@@ -5,11 +5,15 @@ declare(strict_types=1);
 use Graft\Ai\Tools\GitBranchesTool;
 use Graft\Data\Git\Branch;
 use Graft\Facades\Git;
+use Graft\Tests\TestCase;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Ai\Tools\Request;
 
+uses(TestCase::class);
+
 beforeEach(function () {
     $this->tool = new GitBranchesTool;
+    $this->repoPath = allowlistedRepoPath();
 });
 
 it('returns the documented tool id', function () {
@@ -33,7 +37,7 @@ it('returns formatted branch data on success', function () {
         new Branch(name: 'feature/foo', isCurrent: false, isRemote: false),
     ]));
 
-    $output = $this->tool->handle(new Request(['repo_path' => '/tmp/repo', 'remote' => true]));
+    $output = $this->tool->handle(new Request(['repo_path' => $this->repoPath, 'remote' => true]));
 
     $data = json_decode($output, true);
     expect($data['count'])->toBe(2)
@@ -42,21 +46,21 @@ it('returns formatted branch data on success', function () {
         ->and($data['branches'][0]['upstream'])->toBe('origin/main')
         ->and($data['branches'][1]['name'])->toBe('feature/foo');
 
-    $fake->assertCalled('branches', fn ($args) => $args[0] === '/tmp/repo' && $args[1] === true);
+    $fake->assertCalled('branches', fn ($args) => $args[0] === $this->repoPath && $args[1] === true);
 });
 
 it('returns "No branches found" when collection is empty', function () {
     Git::fake()->shouldReturn('branches', collect());
 
-    $output = $this->tool->handle(new Request(['repo_path' => '/tmp/repo']));
+    $output = $this->tool->handle(new Request(['repo_path' => $this->repoPath]));
 
     expect($output)->toBe('No branches found.');
 });
 
-it('returns an Error message when the underlying call throws', function () {
+it('returns a structured error when the underlying call throws', function () {
     Git::fake()->shouldThrow('branches', new RuntimeException('boom'));
 
-    $output = $this->tool->handle(new Request(['repo_path' => '/tmp/repo']));
+    $output = $this->tool->handle(new Request(['repo_path' => $this->repoPath]));
 
-    expect($output)->toStartWith('Error');
+    expect(decodeToolError($output)['message'])->toContain('boom');
 });

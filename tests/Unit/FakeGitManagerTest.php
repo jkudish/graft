@@ -5,7 +5,10 @@ use Graft\Data\Git\Status;
 use Graft\Facades\Git;
 use Graft\ScopedRepository;
 use Graft\Testing\FakeGitManager;
+use Graft\Tests\TestCase;
 use Illuminate\Support\Collection;
+
+uses(TestCase::class);
 
 test('records method calls', function () {
     $fake = new FakeGitManager;

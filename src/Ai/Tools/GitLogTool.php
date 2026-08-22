@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Graft\Ai\Tools;
 
+use Graft\Ai\AllowedPath;
 use Graft\Ai\Contracts\IdentifiableTool;
+use Graft\Ai\ToolResponse;
 use Graft\Data\Git\Commit;
 use Graft\Facades\Git;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -32,16 +34,12 @@ class GitLogTool implements IdentifiableTool, Tool
      */
     public function handle(Request $request): string
     {
-        /** @var string $repoPath */
-        $repoPath = (string) $request->string('repo_path');
-        if ($repoPath === '') {
-            $repoPath = base_path();
-        }
-
-        /** @var int $limit */
-        $limit = $request->integer('limit', 10) ?: 10;
-
         try {
+            $repoPath = AllowedPath::resolve((string) $request->string('repo_path'));
+
+            /** @var int $limit */
+            $limit = $request->integer('limit', 10) ?: 10;
+
             $commits = Git::log($repoPath, $limit);
 
             if ($commits->isEmpty()) {
@@ -55,14 +53,12 @@ class GitLogTool implements IdentifiableTool, Tool
                 'date' => $commit->date->toIso8601String(),
             ])->all();
 
-            $data = [
+            return ToolResponse::json([
                 'count' => count($formatted),
                 'commits' => $formatted,
-            ];
-
-            return json_encode($data, JSON_PRETTY_PRINT) ?: 'No data.';
+            ]);
         } catch (Throwable $e) {
-            return "Error getting git log: {$e->getMessage()}";
+            return ToolResponse::error("Error getting git log: {$e->getMessage()}");
         }
     }
 

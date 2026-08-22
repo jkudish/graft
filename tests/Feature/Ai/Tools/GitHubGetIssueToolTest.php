@@ -6,8 +6,11 @@ use Carbon\CarbonImmutable;
 use Graft\Ai\Tools\GitHubGetIssueTool;
 use Graft\Data\Platform\Issue;
 use Graft\Facades\GitHub;
+use Graft\Tests\TestCase;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Ai\Tools\Request;
+
+uses(TestCase::class);
 
 beforeEach(function () {
     $this->tool = new GitHubGetIssueTool;
@@ -52,10 +55,10 @@ it('returns formatted issue data on success', function () {
     $fake->assertCalled('getIssue', fn ($args) => $args[0] === 'owner/repo' && $args[1] === 7);
 });
 
-it('returns an Error message when the underlying call throws', function () {
+it('returns a structured error when the underlying call throws', function () {
     GitHub::fake()->shouldThrow('getIssue', new RuntimeException('boom'));
 
     $output = $this->tool->handle(new Request(['repo' => 'owner/repo', 'number' => 7]));
 
-    expect($output)->toStartWith('Error');
+    expect(decodeToolError($output)['message'])->toContain('boom');
 });
