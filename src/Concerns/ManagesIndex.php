@@ -49,9 +49,9 @@ trait ManagesIndex
      */
     public function status(string $repoPath): Status
     {
-        $output = rtrim($this->run($repoPath, ['status', '--porcelain'])->getOutput());
+        $output = $this->run($repoPath, ['status', '-z', '--porcelain=v1'])->getOutput();
 
-        if (empty($output)) {
+        if ($output === '') {
             return new Status(
                 staged: [],
                 unstaged: [],
@@ -62,33 +62,31 @@ trait ManagesIndex
         $staged = [];
         $unstaged = [];
         $untracked = [];
+        $offset = 0;
 
-        foreach (explode("\n", $output) as $line) {
-            if (empty($line)) {
+        while (($record = $this->nextNulTerminated($output, $offset)) !== null) {
+            if (strlen($record) < 2) {
                 continue;
             }
 
-            $statusCode = substr($line, 0, 2);
-            $file = (string) substr($line, 3);
+            $statusCode = substr($record, 0, 2);
+            // Porcelain v1 -z is `XY PATH\0`; rename/copy adds `ORIG_PATH\0` after.
+            $file = strlen($record) > 3 ? substr($record, 3) : '';
 
-            // Handle renames: "R  old -> new"
-            if (str_starts_with($statusCode, 'R')) {
-                $file = (string) preg_replace('/.*\s+->\s+/', '', $file);
+            if (str_contains($statusCode, 'R') || str_contains($statusCode, 'C')) {
+                $this->nextNulTerminated($output, $offset);
             }
 
-            // Untracked files
             if ($statusCode === '??') {
                 $untracked[] = $file;
 
                 continue;
             }
 
-            // Staged changes (first character)
             if ($statusCode[0] !== ' ' && $statusCode[0] !== '?') {
                 $staged[] = $file;
             }
 
-            // Unstaged changes (second character)
             if ($statusCode[1] !== ' ') {
                 $unstaged[] = $file;
             }
@@ -99,6 +97,30 @@ trait ManagesIndex
             unstaged: $unstaged,
             untracked: $untracked
         );
+    }
+
+    /**
+     * Read the next NUL-terminated record from porcelain -z output.
+     */
+    private function nextNulTerminated(string $output, int &$offset): ?string
+    {
+        if ($offset >= strlen($output)) {
+            return null;
+        }
+
+        $nextNul = strpos($output, "\0", $offset);
+
+        if ($nextNul === false) {
+            $value = substr($output, $offset);
+            $offset = strlen($output);
+
+            return $value === '' ? null : $value;
+        }
+
+        $value = substr($output, $offset, $nextNul - $offset);
+        $offset = $nextNul + 1;
+
+        return $value;
     }
 
     /**

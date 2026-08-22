@@ -2,6 +2,7 @@
 
 use Carbon\CarbonImmutable;
 use Graft\Data\Git\Commit;
+use Graft\Exceptions\ProcessException;
 use Graft\ProcessGitManager;
 use Graft\Tests\Concerns\CreatesTestRepositories;
 
@@ -38,6 +39,46 @@ test('commit with allowEmpty flag', function () {
 
     expect($commit)->toBeInstanceOf(Commit::class)
         ->and($commit->message)->toBe('Empty commit');
+});
+
+test('commit with noVerify skips hooks', function () {
+    $repo = $this->createTestRepository();
+    $this->createFileInRepo($repo, 'file.txt', 'content');
+    $this->runGit($repo, ['add', '.']);
+
+    $hook = $repo.'/.git/hooks/pre-commit';
+    file_put_contents($hook, "#!/bin/sh\nexit 1\n");
+    chmod($hook, 0755);
+
+    expect(fn () => $this->git->commit($repo, 'Should fail'))
+        ->toThrow(ProcessException::class);
+
+    $commit = $this->git->commit($repo, 'Skip hooks', noVerify: true);
+
+    expect($commit)->toBeInstanceOf(Commit::class)
+        ->and($commit->message)->toBe('Skip hooks');
+});
+
+test('log and show round-trip a commit subject containing a pipe', function () {
+    $repo = $this->createTestRepository();
+    $this->createFileInRepo($repo, 'file.txt', 'content');
+    $this->runGit($repo, ['add', '.']);
+
+    $message = 'feat: parse A | B | C correctly';
+    $commit = $this->git->commit($repo, $message);
+
+    expect($commit->message)->toBe($message);
+
+    $shown = $this->git->show($repo, $commit->hash);
+    expect($shown->message)->toBe($message)
+        ->and($shown->author)->toBe($commit->author)
+        ->and($shown->email)->toBe($commit->email)
+        ->and($shown->hash)->toBe($commit->hash);
+
+    $logged = $this->git->log($repo, 1);
+    expect($logged)->toHaveCount(1)
+        ->and($logged->first()->message)->toBe($message)
+        ->and($logged->first()->hash)->toBe($commit->hash);
 });
 
 test('log returns collection of commits', function () {

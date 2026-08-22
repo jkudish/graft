@@ -52,7 +52,7 @@ trait ManagesRemotes
     /**
      * Push updates to a remote repository.
      */
-    public function push(string $repoPath, ?string $remote = null, ?string $branch = null, bool $force = false, bool $setUpstream = false): void
+    public function push(string $repoPath, ?string $remote = null, ?string $branch = null, bool $force = false, bool $setUpstream = false, bool $forceWithLease = false): void
     {
         $args = ['push'];
 
@@ -60,7 +60,9 @@ trait ManagesRemotes
             $args[] = '-u';
         }
 
-        if ($force) {
+        if ($forceWithLease) {
+            $args[] = '--force-with-lease';
+        } elseif ($force) {
             $args[] = '--force';
         }
 

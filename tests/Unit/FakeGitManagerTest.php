@@ -350,6 +350,22 @@ test('returns sensible defaults for string methods', function () {
     expect($fake->diff('/tmp/test'))->toBe('');
 });
 
+test('records noVerify on commit', function () {
+    $fake = new FakeGitManager;
+
+    $fake->commit('/tmp/test', 'Skip hooks', false, true);
+
+    $fake->assertCalled('commit', fn ($args) => $args[1] === 'Skip hooks' && $args[3] === true);
+});
+
+test('records forceWithLease on push', function () {
+    $fake = new FakeGitManager;
+
+    $fake->push('/tmp/test', 'origin', 'main', false, false, true);
+
+    $fake->assertCalled('push', fn ($args) => $args[2] === 'main' && $args[5] === true);
+});
+
 test('repo method returns scoped repository', function () {
     $fake = Git::fake();
 

@@ -264,9 +264,9 @@ class FakeGitManager implements GitManager
         $this->record('pruneWorktrees', [$repoPath]);
     }
 
-    public function commit(string $repoPath, string $message, bool $allowEmpty = false): Commit
+    public function commit(string $repoPath, string $message, bool $allowEmpty = false, bool $noVerify = false): Commit
     {
-        $result = $this->record('commit', [$repoPath, $message, $allowEmpty]);
+        $result = $this->record('commit', [$repoPath, $message, $allowEmpty, $noVerify]);
 
         return $result ?? new Commit(
             hash: 'abc123def456',
@@ -340,9 +340,9 @@ class FakeGitManager implements GitManager
         $this->record('pull', [$repoPath, $remote, $branch, $noRebase]);
     }
 
-    public function push(string $repoPath, ?string $remote = null, ?string $branch = null, bool $force = false, bool $setUpstream = false): void
+    public function push(string $repoPath, ?string $remote = null, ?string $branch = null, bool $force = false, bool $setUpstream = false, bool $forceWithLease = false): void
     {
-        $this->record('push', [$repoPath, $remote, $branch, $force, $setUpstream]);
+        $this->record('push', [$repoPath, $remote, $branch, $force, $setUpstream, $forceWithLease]);
     }
 
     public function remotes(string $repoPath): Collection

@@ -3,10 +3,33 @@
 declare(strict_types=1);
 
 use Graft\Data\Git\MergeResult;
+use Graft\Exceptions\ProcessException;
 use Graft\ProcessGitManager;
 use Graft\Tests\Concerns\CreatesTestRepositories;
+use Symfony\Component\Process\Process;
 
 uses(CreatesTestRepositories::class);
+
+/**
+ * Records buildProcess args and env so we can assert merge() no longer
+ * constructs a raw Process outside ProcessGitManager.
+ */
+class RecordingProcessGitManager extends ProcessGitManager
+{
+    /** @var list<array{args: list<string>, env: array<string, string>}> */
+    public array $invocations = [];
+
+    protected function buildProcess(string $repoPath, array $args, ?int $timeout = null, array $extraEnv = []): Process
+    {
+        $process = parent::buildProcess($repoPath, $args, $timeout, $extraEnv);
+        $this->invocations[] = [
+            'args' => $args,
+            'env' => $process->getEnv(),
+        ];
+
+        return $process;
+    }
+}
 
 beforeEach(function () {
     $this->git = new ProcessGitManager;
@@ -150,4 +173,36 @@ test('mergeAbort cancels an in-progress merge', function () {
     // Verify no merge is in progress
     $status = $this->runGit($repo, ['status', '--porcelain']);
     expect($status)->toBe('');
+});
+
+test('merge of unknown branch throws ProcessException', function () {
+    $repo = $this->createTestRepositoryWithCommit();
+
+    $this->git->merge($repo, 'does-not-exist');
+})->throws(ProcessException::class);
+
+test('merge runs through ProcessGitManager with prompt-disabled env', function () {
+    $git = new RecordingProcessGitManager;
+    $repo = $this->createTestRepositoryWithCommit();
+
+    $mainBranch = $this->getMainBranch($repo);
+
+    $this->runGit($repo, ['checkout', '-b', 'feature']);
+    $this->createFileInRepo($repo, 'feature.txt', 'feature content');
+    $this->runGit($repo, ['add', '.']);
+    $this->runGit($repo, ['commit', '-m', 'Add feature']);
+    $this->runGit($repo, ['checkout', $mainBranch]);
+
+    $result = $git->merge($repo, 'feature');
+
+    expect($result->success)->toBeTrue();
+
+    $mergeCall = collect($git->invocations)->first(
+        fn (array $invocation): bool => ($invocation['args'][0] ?? null) === 'merge'
+    );
+
+    expect($mergeCall)->not->toBeNull()
+        ->and($mergeCall['args'])->toBe(['merge', 'feature'])
+        ->and($mergeCall['env'])->toHaveKey('GIT_TERMINAL_PROMPT', '0')
+        ->and($mergeCall['env'])->toHaveKey('GCM_INTERACTIVE', 'never');
 });

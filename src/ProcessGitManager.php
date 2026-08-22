@@ -63,7 +63,11 @@ class ProcessGitManager implements GitManager
      *
      * `$extraEnv` is for one-off overrides like injecting `GIT_CONFIG_*` env
      * vars during `git clone` (where the persisted helper isn't yet in
-     * `.git/config`). Keys in `$extraEnv` win over the helper's standing env.
+     * `.git/config`). Keys in `$extraEnv` win over the helper's standing env
+     * and the default prompt-disabled vars.
+     *
+     * Every invocation sets `GIT_TERMINAL_PROMPT=0` and `GCM_INTERACTIVE=never`
+     * so a missing credential fails fast instead of hanging a queue worker.
      *
      * @param  list<string>  $args
      * @param  array<string, string>  $extraEnv
@@ -71,6 +75,10 @@ class ProcessGitManager implements GitManager
     protected function buildProcess(string $repoPath, array $args, ?int $timeout = null, array $extraEnv = []): Process
     {
         $env = array_merge(
+            [
+                'GIT_TERMINAL_PROMPT' => '0',
+                'GCM_INTERACTIVE' => 'never',
+            ],
             $this->credentialHelper?->processEnv() ?? [],
             $extraEnv,
         );
@@ -112,6 +120,23 @@ class ProcessGitManager implements GitManager
     protected function runAndReturn(string $repoPath, array $args, ?int $timeout = null, array $extraEnv = []): string
     {
         return trim($this->run($repoPath, $args, $timeout, $extraEnv)->getOutput());
+    }
+
+    /**
+     * Run a git command without throwing on a non-zero exit.
+     *
+     * Used by merge() so conflict output can be inspected instead of being
+     * raised as ProcessException before we classify the failure.
+     *
+     * @param  list<string>  $args
+     * @param  array<string, string>  $extraEnv
+     */
+    protected function runAllowingFailure(string $repoPath, array $args, ?int $timeout = null, array $extraEnv = []): Process
+    {
+        $process = $this->buildProcess($repoPath, $args, $timeout, $extraEnv);
+        $process->run();
+
+        return $process;
     }
 
     /**

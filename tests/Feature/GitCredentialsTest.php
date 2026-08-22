@@ -117,7 +117,23 @@ test('env mode injects GRAFT_GITHUB_TOKEN into Symfony Process env', function ()
     foreach ($manager->envHistory as $env) {
         expect($env)
             ->toBeArray()
-            ->toHaveKey('GRAFT_GITHUB_TOKEN', 'ghp_proc_env');
+            ->toHaveKey('GRAFT_GITHUB_TOKEN', 'ghp_proc_env')
+            ->toHaveKey('GIT_TERMINAL_PROMPT', '0')
+            ->toHaveKey('GCM_INTERACTIVE', 'never');
+    }
+});
+
+test('every process sets GIT_TERMINAL_PROMPT even without a credential helper', function () {
+    $manager = new SpyingProcessGitManager;
+
+    $manager->init($this->repoPath);
+
+    expect($manager->envHistory)->not->toBeEmpty();
+    foreach ($manager->envHistory as $env) {
+        expect($env)
+            ->toBeArray()
+            ->toHaveKey('GIT_TERMINAL_PROMPT', '0')
+            ->toHaveKey('GCM_INTERACTIVE', 'never');
     }
 });
 
@@ -225,6 +241,8 @@ test('clone passes GIT_CONFIG_* bootstrap env so private clones authenticate', f
         ->and($cloneEnv)
         ->toHaveKey('GIT_CONFIG_COUNT', '1')
         ->toHaveKey('GIT_CONFIG_KEY_0', 'credential.https://github.com.helper')
+        ->toHaveKey('GIT_TERMINAL_PROMPT', '0')
+        ->toHaveKey('GCM_INTERACTIVE', 'never')
         ->and($cloneEnv['GIT_CONFIG_VALUE_0'])->toContain('ghp_bootstrap_secret');
 });
 

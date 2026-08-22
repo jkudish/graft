@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Graft\Exceptions\ProcessException;
 use Graft\ProcessGitManager;
 use Graft\Tests\Concerns\CreatesTestRepositories;
 
@@ -132,6 +133,55 @@ test('pull pulls from remote', function () {
 
     // Verify file exists
     expect(file_exists($clone.'/newfile.txt'))->toBeTrue();
+});
+
+test('push with forceWithLease updates remote after amend', function () {
+    $source = $this->createTestRepositoryWithCommit();
+    $remote = $this->createTestRepository(bare: true);
+
+    $this->git->addRemote($source, 'origin', $remote);
+    $branch = $this->runGit($source, ['branch', '--show-current']);
+    $this->git->push($source, 'origin', $branch, setUpstream: true);
+
+    $this->createFileInRepo($source, 'amended.txt', 'amended');
+    $this->runGit($source, ['add', '.']);
+    $this->runGit($source, ['commit', '--amend', '--no-edit']);
+
+    expect(fn () => $this->git->push($source, 'origin', $branch))
+        ->toThrow(ProcessException::class);
+
+    $this->git->push($source, 'origin', $branch, forceWithLease: true);
+
+    $remoteHead = $this->runGit($remote, ['rev-parse', $branch]);
+    $localHead = $this->runGit($source, ['rev-parse', 'HEAD']);
+    expect($remoteHead)->toBe($localHead);
+});
+
+test('push with forceWithLease fails when remote has moved', function () {
+    $source = $this->createTestRepositoryWithCommit();
+    $remote = $this->createTestRepository(bare: true);
+
+    $this->git->addRemote($source, 'origin', $remote);
+    $branch = $this->runGit($source, ['branch', '--show-current']);
+    $this->git->push($source, 'origin', $branch, setUpstream: true);
+
+    $clone = sys_get_temp_dir().'/graft-test-'.uniqid();
+    $this->testRepoPaths[] = $clone;
+    $this->git->clone($remote, $clone);
+    $this->runGit($clone, ['config', 'user.email', 'test@graft.dev']);
+    $this->runGit($clone, ['config', 'user.name', 'Graft Test']);
+
+    $this->createFileInRepo($clone, 'from-clone.txt', 'clone content');
+    $this->runGit($clone, ['add', '.']);
+    $this->runGit($clone, ['commit', '-m', 'Clone moved the tip']);
+    $this->runGit($clone, ['push', 'origin', $branch]);
+
+    $this->createFileInRepo($source, 'amended.txt', 'amended');
+    $this->runGit($source, ['add', '.']);
+    $this->runGit($source, ['commit', '--amend', '--no-edit']);
+
+    expect(fn () => $this->git->push($source, 'origin', $branch, forceWithLease: true))
+        ->toThrow(ProcessException::class);
 });
 
 test('push with setUpstream flag', function () {

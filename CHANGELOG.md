@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Git::commit()` accepts `noVerify: true` to pass `--no-verify` (skip hooks).
+- `Git::push()` accepts `forceWithLease: true` to pass `--force-with-lease`. When both `force` and `forceWithLease` are set, lease is used.
+
+### Fixed
+
+- `Git::merge()` now goes through `ProcessGitManager` (configured binary, timeout, credential env) instead of constructing a raw `Process`.
+- Git subprocesses always set `GIT_TERMINAL_PROMPT=0` and `GCM_INTERACTIVE=never` so missing credentials fail fast instead of hanging a worker.
+- `status`, `log`, `show`, and `branches` parsers use NUL-delimited formats so paths and commit subjects containing spaces, quotes, or `|` round-trip correctly.
+
 ## [0.3.0] - 2026-05-09
 
 ### Added
