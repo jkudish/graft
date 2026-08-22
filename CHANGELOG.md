@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- AI write tools for the commit / push / PR / CI loop: `GitCheckoutTool`, `GitCommitTool`, `GitPushTool`, `GitHubCreatePrTool`, `GitHubGetCiStatusTool`, `GitHubMergePrTool`, and `GitHubSubmitReviewTool`
+- `GitHubGetPrTool` (`graft:github:get-pr`) replacing the fetch-only `GitHubPrReviewTool`
+- Path allowlisting for AI git tools (`GRAFT_AI_ALLOWED_REPOS`, `GRAFT_AI_ALLOW_BASE_PATH`) via `Graft\Ai\AllowedPath`
+- Optional `owner/repo` allowlisting for GitHub AI tools (`GRAFT_AI_ALLOWED_REPOSITORIES`) via `Graft\Ai\AllowedRepository`
+
+### Changed
+
+- AI tools now return structured JSON errors (`{"error": true, "message": "..."}`) instead of plain `"Error …"` strings
+- `GitHubCreateIssueTool` `labels` is a JSON Schema array instead of a JSON string
+- `GraftServiceProvider` only tags AI tools when `Laravel\Ai\Contracts\Tool` is present
+
 ## [0.3.0] - 2026-05-09
 
 ### Added

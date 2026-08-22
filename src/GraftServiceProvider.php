@@ -5,19 +5,27 @@ declare(strict_types=1);
 namespace Graft;
 
 use Graft\Ai\Tools\GitBranchesTool;
+use Graft\Ai\Tools\GitCheckoutTool;
+use Graft\Ai\Tools\GitCommitTool;
 use Graft\Ai\Tools\GitDiffTool;
 use Graft\Ai\Tools\GitHubCreateIssueTool;
+use Graft\Ai\Tools\GitHubCreatePrTool;
+use Graft\Ai\Tools\GitHubGetCiStatusTool;
 use Graft\Ai\Tools\GitHubGetIssueTool;
+use Graft\Ai\Tools\GitHubGetPrTool;
 use Graft\Ai\Tools\GitHubListIssuesTool;
 use Graft\Ai\Tools\GitHubListPrsTool;
-use Graft\Ai\Tools\GitHubPrReviewTool;
+use Graft\Ai\Tools\GitHubMergePrTool;
+use Graft\Ai\Tools\GitHubSubmitReviewTool;
 use Graft\Ai\Tools\GitLogTool;
+use Graft\Ai\Tools\GitPushTool;
 use Graft\Ai\Tools\GitStatusTool;
 use Graft\Auth\GitCredentialHelper;
 use Graft\Contracts\GitManager;
 use Graft\Contracts\PlatformProvider;
 use Illuminate\Foundation\Console\AboutCommand;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Ai\Contracts\Tool;
 
 class GraftServiceProvider extends ServiceProvider
 {
@@ -47,17 +55,26 @@ class GraftServiceProvider extends ServiceProvider
             ], 'graft-config');
         }
 
-        $this->app->tag([
-            GitStatusTool::class,
-            GitDiffTool::class,
-            GitLogTool::class,
-            GitBranchesTool::class,
-            GitHubGetIssueTool::class,
-            GitHubListIssuesTool::class,
-            GitHubListPrsTool::class,
-            GitHubCreateIssueTool::class,
-            GitHubPrReviewTool::class,
-        ], 'ai-tools');
+        if (class_exists(Tool::class)) {
+            $this->app->tag([
+                GitStatusTool::class,
+                GitDiffTool::class,
+                GitLogTool::class,
+                GitBranchesTool::class,
+                GitCheckoutTool::class,
+                GitCommitTool::class,
+                GitPushTool::class,
+                GitHubGetIssueTool::class,
+                GitHubListIssuesTool::class,
+                GitHubListPrsTool::class,
+                GitHubGetPrTool::class,
+                GitHubCreateIssueTool::class,
+                GitHubCreatePrTool::class,
+                GitHubGetCiStatusTool::class,
+                GitHubMergePrTool::class,
+                GitHubSubmitReviewTool::class,
+            ], 'ai-tools');
+        }
 
         AboutCommand::add('Graft', fn (): array => [
             'Git Binary' => config('graft.git_binary'),

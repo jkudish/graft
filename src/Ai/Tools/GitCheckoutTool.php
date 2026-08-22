@@ -13,11 +13,11 @@ use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 use Throwable;
 
-class GitDiffTool implements IdentifiableTool, Tool
+class GitCheckoutTool implements IdentifiableTool, Tool
 {
     public static function toolId(): string
     {
-        return 'graft:git:diff';
+        return 'graft:git:checkout';
     }
 
     /**
@@ -25,7 +25,7 @@ class GitDiffTool implements IdentifiableTool, Tool
      */
     public function description(): string
     {
-        return 'Get the git diff for a repository, optionally showing only staged changes.';
+        return 'Check out a git branch, optionally creating it.';
     }
 
     /**
@@ -35,19 +35,24 @@ class GitDiffTool implements IdentifiableTool, Tool
     {
         try {
             $repoPath = AllowedPath::resolve((string) $request->string('repo_path'));
+            $branch = (string) $request->string('branch');
 
-            /** @var bool $staged */
-            $staged = $request->boolean('staged', false);
-
-            $diff = Git::diff($repoPath, $staged);
-
-            if ($diff === '') {
-                return 'No differences found.';
+            if ($branch === '') {
+                return ToolResponse::error('A branch name is required.');
             }
 
-            return $diff;
+            /** @var bool $create */
+            $create = $request->boolean('create', false);
+
+            Git::checkout($repoPath, $branch, $create);
+
+            return ToolResponse::json([
+                'ok' => true,
+                'branch' => $branch,
+                'created' => $create,
+            ]);
         } catch (Throwable $e) {
-            return ToolResponse::error("Error getting git diff: {$e->getMessage()}");
+            return ToolResponse::error("Error checking out branch: {$e->getMessage()}");
         }
     }
 
@@ -62,9 +67,13 @@ class GitDiffTool implements IdentifiableTool, Tool
             'repo_path' => $schema
                 ->string()
                 ->description('Path to the git repository (defaults to project root).'),
-            'staged' => $schema
+            'branch' => $schema
+                ->string()
+                ->description('The branch to check out.')
+                ->required(),
+            'create' => $schema
                 ->boolean()
-                ->description('Show only staged changes (default: false).'),
+                ->description('Create the branch if it does not exist (default: false).'),
         ];
     }
 }

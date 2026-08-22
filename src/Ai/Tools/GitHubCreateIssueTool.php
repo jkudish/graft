@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Graft\Ai\Tools;
 
+use Graft\Ai\AllowedRepository;
 use Graft\Ai\Contracts\IdentifiableTool;
+use Graft\Ai\ToolResponse;
 use Graft\Facades\GitHub;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Ai\Contracts\Tool;
@@ -31,40 +33,32 @@ class GitHubCreateIssueTool implements IdentifiableTool, Tool
      */
     public function handle(Request $request): string
     {
-        /** @var string $repo */
-        $repo = (string) $request->string('repo');
-        /** @var string $title */
-        $title = (string) $request->string('title');
-        /** @var string $body */
-        $body = (string) $request->string('body');
-
-        /** @var string $labelsJson */
-        $labelsJson = (string) $request->string('labels');
-
-        /** @var list<string> $labels */
-        $labels = [];
-        if ($labelsJson !== '') {
-            $decoded = json_decode($labelsJson, true);
-            if (is_array($decoded)) {
-                /** @var list<string> $labels */
-                $labels = $decoded;
-            }
-        }
-
         try {
+            $repo = (string) $request->string('repo');
+            AllowedRepository::assertAllowed($repo);
+
+            /** @var string $title */
+            $title = (string) $request->string('title');
+            /** @var string $body */
+            $body = (string) $request->string('body');
+
+            /** @var list<string> $labels */
+            $labels = array_values(array_filter(
+                array_map(static fn (mixed $label): string => trim((string) $label), $request->array('labels')),
+                static fn (string $label): bool => $label !== '',
+            ));
+
             $issue = GitHub::createIssue($repo, $title, $body, $labels);
 
-            $data = [
+            return ToolResponse::json([
                 'number' => $issue->number,
                 'title' => $issue->title,
                 'state' => $issue->state,
                 'url' => $issue->url,
                 'labels' => $issue->labels,
-            ];
-
-            return json_encode($data, JSON_PRETTY_PRINT) ?: 'No data.';
+            ]);
         } catch (Throwable $e) {
-            return "Error creating issue: {$e->getMessage()}";
+            return ToolResponse::error("Error creating issue: {$e->getMessage()}");
         }
     }
 
@@ -89,8 +83,9 @@ class GitHubCreateIssueTool implements IdentifiableTool, Tool
                 ->description('The issue body/description.')
                 ->required(),
             'labels' => $schema
-                ->string()
-                ->description('JSON array of label names to apply (optional).'),
+                ->array()
+                ->items($schema->string())
+                ->description('Label names to apply (optional).'),
         ];
     }
 }

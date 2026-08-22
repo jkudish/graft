@@ -10,6 +10,7 @@ use Laravel\Ai\Tools\Request;
 
 beforeEach(function () {
     $this->tool = new GitStatusTool;
+    $this->repoPath = allowlistedRepoPath();
 });
 
 it('returns the documented tool id', function () {
@@ -34,7 +35,7 @@ it('returns formatted status data on success', function () {
         untracked: ['app/Baz.php'],
     ));
 
-    $output = $this->tool->handle(new Request(['repo_path' => '/tmp/repo']));
+    $output = $this->tool->handle(new Request(['repo_path' => $this->repoPath]));
 
     $data = json_decode($output, true);
     expect($data['is_clean'])->toBeFalse()
@@ -42,22 +43,22 @@ it('returns formatted status data on success', function () {
         ->and($data['unstaged'])->toBe(['app/Bar.php'])
         ->and($data['untracked'])->toBe(['app/Baz.php']);
 
-    $fake->assertCalled('status', fn ($args) => $args[0] === '/tmp/repo');
+    $fake->assertCalled('status', fn ($args) => $args[0] === $this->repoPath);
 });
 
 it('reports a clean status when all collections are empty', function () {
     Git::fake()->shouldReturn('status', new Status(staged: [], unstaged: [], untracked: []));
 
-    $output = $this->tool->handle(new Request(['repo_path' => '/tmp/repo']));
+    $output = $this->tool->handle(new Request(['repo_path' => $this->repoPath]));
 
     $data = json_decode($output, true);
     expect($data['is_clean'])->toBeTrue();
 });
 
-it('returns an Error message when the underlying call throws', function () {
+it('returns a structured error when the underlying call throws', function () {
     Git::fake()->shouldThrow('status', new RuntimeException('boom'));
 
-    $output = $this->tool->handle(new Request(['repo_path' => '/tmp/repo']));
+    $output = $this->tool->handle(new Request(['repo_path' => $this->repoPath]));
 
-    expect($output)->toStartWith('Error');
+    expect(decodeToolError($output)['message'])->toContain('boom');
 });

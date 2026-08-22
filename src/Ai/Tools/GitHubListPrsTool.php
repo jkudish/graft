@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Graft\Ai\Tools;
 
+use Graft\Ai\AllowedRepository;
 use Graft\Ai\Contracts\IdentifiableTool;
+use Graft\Ai\ToolResponse;
 use Graft\Data\Platform\PullRequest;
 use Graft\Facades\GitHub;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
@@ -32,15 +34,16 @@ class GitHubListPrsTool implements IdentifiableTool, Tool
      */
     public function handle(Request $request): string
     {
-        /** @var string $repo */
-        $repo = (string) $request->string('repo');
-        /** @var string $state */
-        $state = (string) $request->string('state');
-        if ($state === '') {
-            $state = 'open';
-        }
-
         try {
+            $repo = (string) $request->string('repo');
+            AllowedRepository::assertAllowed($repo);
+
+            /** @var string $state */
+            $state = (string) $request->string('state');
+            if ($state === '') {
+                $state = 'open';
+            }
+
             $prs = GitHub::listPullRequests($repo, $state);
 
             if ($prs->isEmpty()) {
@@ -58,14 +61,12 @@ class GitHubListPrsTool implements IdentifiableTool, Tool
                 'url' => $pr->url,
             ])->all();
 
-            $data = [
+            return ToolResponse::json([
                 'count' => count($formatted),
                 'pull_requests' => $formatted,
-            ];
-
-            return json_encode($data, JSON_PRETTY_PRINT) ?: 'No data.';
+            ]);
         } catch (Throwable $e) {
-            return "Error listing pull requests: {$e->getMessage()}";
+            return ToolResponse::error("Error listing pull requests: {$e->getMessage()}");
         }
     }
 

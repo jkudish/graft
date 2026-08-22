@@ -13,11 +13,13 @@ use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Tools\Request;
 use Throwable;
 
-class GitHubGetIssueTool implements IdentifiableTool, Tool
+class GitHubMergePrTool implements IdentifiableTool, Tool
 {
+    private const METHODS = ['squash', 'merge', 'rebase'];
+
     public static function toolId(): string
     {
-        return 'graft:github:get-issue';
+        return 'graft:github:merge-pr';
     }
 
     /**
@@ -25,7 +27,7 @@ class GitHubGetIssueTool implements IdentifiableTool, Tool
      */
     public function description(): string
     {
-        return 'Get details of a GitHub issue by number.';
+        return 'Merge a GitHub pull request using squash, merge, or rebase.';
     }
 
     /**
@@ -40,21 +42,28 @@ class GitHubGetIssueTool implements IdentifiableTool, Tool
             $repo = (string) $request->string('repo');
             AllowedRepository::assertAllowed($repo);
 
-            $issue = GitHub::getIssue($repo, $number);
+            if ($number < 1) {
+                return ToolResponse::error('A pull request number is required.');
+            }
+
+            $method = strtolower((string) $request->string('method'));
+            if ($method === '') {
+                $method = 'squash';
+            }
+
+            if (! in_array($method, self::METHODS, true)) {
+                return ToolResponse::error('Merge method must be squash, merge, or rebase.');
+            }
+
+            GitHub::mergePullRequest($repo, $number, $method);
 
             return ToolResponse::json([
-                'number' => $issue->number,
-                'title' => $issue->title,
-                'body' => $issue->body,
-                'state' => $issue->state,
-                'url' => $issue->url,
-                'author' => $issue->author,
-                'labels' => $issue->labels,
-                'assignees' => $issue->assignees,
-                'created_at' => $issue->createdAt?->toIso8601String(),
+                'ok' => true,
+                'number' => $number,
+                'method' => $method,
             ]);
         } catch (Throwable $e) {
-            return ToolResponse::error("Error fetching issue #{$number}: {$e->getMessage()}");
+            return ToolResponse::error("Error merging PR #{$number}: {$e->getMessage()}");
         }
     }
 
@@ -72,8 +81,11 @@ class GitHubGetIssueTool implements IdentifiableTool, Tool
                 ->required(),
             'number' => $schema
                 ->integer()
-                ->description('The issue number.')
+                ->description('The pull request number.')
                 ->required(),
+            'method' => $schema
+                ->string()
+                ->description('Merge method: squash, merge, or rebase (default: squash).'),
         ];
     }
 }

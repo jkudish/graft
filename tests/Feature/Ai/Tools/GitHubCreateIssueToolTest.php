@@ -6,6 +6,7 @@ use Graft\Ai\Tools\GitHubCreateIssueTool;
 use Graft\Data\Platform\Issue;
 use Graft\Facades\GitHub;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
+use Illuminate\JsonSchema\Types\ArrayType;
 use Laravel\Ai\Tools\Request;
 
 beforeEach(function () {
@@ -23,7 +24,8 @@ it('returns a non-empty description', function () {
 it('exposes a schema with repo, title, body, and labels fields', function () {
     $schema = $this->tool->schema(new JsonSchemaTypeFactory);
 
-    expect($schema)->toHaveKeys(['repo', 'title', 'body', 'labels']);
+    expect($schema)->toHaveKeys(['repo', 'title', 'body', 'labels'])
+        ->and($schema['labels'])->toBeInstanceOf(ArrayType::class);
 });
 
 it('creates an issue and returns formatted data', function () {
@@ -42,7 +44,7 @@ it('creates an issue and returns formatted data', function () {
         'repo' => 'owner/repo',
         'title' => 'New issue',
         'body' => 'Description',
-        'labels' => '["bug","priority"]',
+        'labels' => ['bug', 'priority'],
     ]));
 
     $data = json_decode($output, true);
@@ -82,7 +84,7 @@ it('handles missing labels parameter without error', function () {
     $fake->assertCalled('createIssue', fn ($args) => $args[3] === []);
 });
 
-it('returns an Error message when the underlying call throws', function () {
+it('returns a structured error when the underlying call throws', function () {
     GitHub::fake()->shouldThrow('createIssue', new RuntimeException('boom'));
 
     $output = $this->tool->handle(new Request([
@@ -91,5 +93,5 @@ it('returns an Error message when the underlying call throws', function () {
         'body' => 'b',
     ]));
 
-    expect($output)->toStartWith('Error');
+    expect(decodeToolError($output)['message'])->toContain('boom');
 });

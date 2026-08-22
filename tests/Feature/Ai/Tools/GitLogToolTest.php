@@ -11,6 +11,7 @@ use Laravel\Ai\Tools\Request;
 
 beforeEach(function () {
     $this->tool = new GitLogTool;
+    $this->repoPath = allowlistedRepoPath();
 });
 
 it('returns the documented tool id', function () {
@@ -48,7 +49,7 @@ it('returns formatted commit data on success', function () {
         ),
     ]));
 
-    $output = $this->tool->handle(new Request(['repo_path' => '/tmp/repo', 'limit' => 5]));
+    $output = $this->tool->handle(new Request(['repo_path' => $this->repoPath, 'limit' => 5]));
 
     $data = json_decode($output, true);
     expect($data['count'])->toBe(2)
@@ -56,21 +57,21 @@ it('returns formatted commit data on success', function () {
         ->and($data['commits'][0]['message'])->toBe('Initial commit')
         ->and($data['commits'][0]['author'])->toBe('Joey');
 
-    $fake->assertCalled('log', fn ($args) => $args[0] === '/tmp/repo' && $args[1] === 5);
+    $fake->assertCalled('log', fn ($args) => $args[0] === $this->repoPath && $args[1] === 5);
 });
 
 it('returns a "no commits" message when empty', function () {
     Git::fake()->shouldReturn('log', collect());
 
-    $output = $this->tool->handle(new Request(['repo_path' => '/tmp/repo']));
+    $output = $this->tool->handle(new Request(['repo_path' => $this->repoPath]));
 
     expect($output)->toBe('No commits found.');
 });
 
-it('returns an Error message when the underlying call throws', function () {
+it('returns a structured error when the underlying call throws', function () {
     Git::fake()->shouldThrow('log', new RuntimeException('boom'));
 
-    $output = $this->tool->handle(new Request(['repo_path' => '/tmp/repo']));
+    $output = $this->tool->handle(new Request(['repo_path' => $this->repoPath]));
 
-    expect($output)->toStartWith('Error');
+    expect(decodeToolError($output)['message'])->toContain('boom');
 });

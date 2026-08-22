@@ -9,6 +9,7 @@ use Laravel\Ai\Tools\Request;
 
 beforeEach(function () {
     $this->tool = new GitDiffTool;
+    $this->repoPath = allowlistedRepoPath();
 });
 
 it('returns the documented tool id', function () {
@@ -31,24 +32,24 @@ it('returns the diff string on success', function () {
     $fake = Git::fake();
     $fake->shouldReturn('diff', $diff);
 
-    $output = $this->tool->handle(new Request(['repo_path' => '/tmp/repo', 'staged' => true]));
+    $output = $this->tool->handle(new Request(['repo_path' => $this->repoPath, 'staged' => true]));
 
     expect($output)->toBe($diff);
-    $fake->assertCalled('diff', fn ($args) => $args[0] === '/tmp/repo' && $args[1] === true);
+    $fake->assertCalled('diff', fn ($args) => $args[0] === $this->repoPath && $args[1] === true);
 });
 
 it('reports "No differences found" when diff is empty', function () {
     Git::fake()->shouldReturn('diff', '');
 
-    $output = $this->tool->handle(new Request(['repo_path' => '/tmp/repo']));
+    $output = $this->tool->handle(new Request(['repo_path' => $this->repoPath]));
 
     expect($output)->toBe('No differences found.');
 });
 
-it('returns an Error message when the underlying call throws', function () {
+it('returns a structured error when the underlying call throws', function () {
     Git::fake()->shouldThrow('diff', new RuntimeException('boom'));
 
-    $output = $this->tool->handle(new Request(['repo_path' => '/tmp/repo']));
+    $output = $this->tool->handle(new Request(['repo_path' => $this->repoPath]));
 
-    expect($output)->toStartWith('Error');
+    expect(decodeToolError($output)['message'])->toContain('boom');
 });

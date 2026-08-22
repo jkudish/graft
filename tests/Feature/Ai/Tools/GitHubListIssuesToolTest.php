@@ -67,10 +67,10 @@ it('returns a "no issues" message when collection is empty', function () {
     expect($output)->toContain('No open issues found for owner/repo');
 });
 
-it('returns an Error message when the underlying call throws', function () {
+it('returns a structured error when the underlying call throws', function () {
     GitHub::fake()->shouldThrow('listIssues', new RuntimeException('boom'));
 
     $output = $this->tool->handle(new Request(['repo' => 'owner/repo']));
 
-    expect($output)->toStartWith('Error');
+    expect(decodeToolError($output)['message'])->toContain('boom');
 });

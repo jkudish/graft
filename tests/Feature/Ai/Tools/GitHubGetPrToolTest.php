@@ -3,18 +3,18 @@
 declare(strict_types=1);
 
 use Carbon\CarbonImmutable;
-use Graft\Ai\Tools\GitHubPrReviewTool;
+use Graft\Ai\Tools\GitHubGetPrTool;
 use Graft\Data\Platform\PullRequest;
 use Graft\Facades\GitHub;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Ai\Tools\Request;
 
 beforeEach(function () {
-    $this->tool = new GitHubPrReviewTool;
+    $this->tool = new GitHubGetPrTool;
 });
 
 it('returns the documented tool id', function () {
-    expect(GitHubPrReviewTool::toolId())->toBe('graft:github:pr-review');
+    expect(GitHubGetPrTool::toolId())->toBe('graft:github:get-pr');
 });
 
 it('returns a non-empty description', function () {
@@ -60,10 +60,10 @@ it('returns formatted PR data on success', function () {
     $fake->assertCalled('getPullRequest', fn ($args) => $args[0] === 'owner/repo' && $args[1] === 12);
 });
 
-it('returns an Error message when the underlying call throws', function () {
+it('returns a structured error when the underlying call throws', function () {
     GitHub::fake()->shouldThrow('getPullRequest', new RuntimeException('boom'));
 
     $output = $this->tool->handle(new Request(['repo' => 'owner/repo', 'number' => 1]));
 
-    expect($output)->toStartWith('Error');
+    expect(decodeToolError($output)['message'])->toContain('boom');
 });

@@ -79,4 +79,25 @@ return [
         'fixture_repo' => env('GRAFT_TEST_REPO', 'jkudish/graft-test-fixture'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | AI Tools
+    |--------------------------------------------------------------------------
+    |
+    | repo_path is resolved with realpath and must equal or sit inside an
+    | allowlisted root. An empty allowed_repos list with allow_base_path
+    | enabled (the default) permits only base_path(). Set allow_base_path
+    | to false to fail closed when no roots are configured.
+    |
+    | allowed_repositories optionally restricts GitHub owner/repo tools.
+    | An empty list allows every repository (backward compatible).
+    |
+    */
+
+    'ai' => [
+        'allowed_repos' => array_values(array_filter(array_map('trim', explode(',', (string) env('GRAFT_AI_ALLOWED_REPOS', ''))))),
+        'allow_base_path' => env('GRAFT_AI_ALLOW_BASE_PATH', true), // backward compatible default
+        'allowed_repositories' => array_values(array_filter(array_map('trim', explode(',', (string) env('GRAFT_AI_ALLOWED_REPOSITORIES', ''))))), // owner/repo; empty = allow all
+    ],
+
 ];
