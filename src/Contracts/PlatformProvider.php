@@ -8,11 +8,17 @@ use Graft\Data\Platform\CheckRun;
 use Graft\Data\Platform\CiStatus;
 use Graft\Data\Platform\Comment;
 use Graft\Data\Platform\Issue;
+use Graft\Data\Platform\IssueUpdate;
 use Graft\Data\Platform\Notification;
 use Graft\Data\Platform\PullRequest;
+use Graft\Data\Platform\PullRequestUpdate;
 use Graft\Data\Platform\Repository;
 use Graft\Data\Platform\RepositoryWebhook;
 use Graft\Data\Platform\Review;
+use Graft\Data\Platform\ReviewCommentInput;
+use Graft\Enums\Platform\ItemState;
+use Graft\Enums\Platform\MergeMethod;
+use Graft\Enums\Platform\ReviewEvent;
 use Illuminate\Support\Collection;
 
 interface PlatformProvider
@@ -25,14 +31,11 @@ interface PlatformProvider
     /**
      * @return Collection<int, PullRequest>
      */
-    public function listPullRequests(string $repo, string $state = 'open'): Collection;
+    public function listPullRequests(string $repo, ItemState $state = ItemState::Open, ?int $limit = null): Collection;
 
-    /**
-     * @param  array<string, mixed>  $data
-     */
-    public function updatePullRequest(string $repo, int $number, array $data): PullRequest;
+    public function updatePullRequest(string $repo, int $number, PullRequestUpdate $data): PullRequest;
 
-    public function mergePullRequest(string $repo, int $number, ?string $method = null): void;
+    public function mergePullRequest(string $repo, int $number, ?MergeMethod $method = null): void;
 
     public function closePullRequest(string $repo, int $number): void;
 
@@ -45,7 +48,7 @@ interface PlatformProvider
     /**
      * @return Collection<int, Review>
      */
-    public function listReviews(string $repo, int $prNumber): Collection;
+    public function listReviews(string $repo, int $prNumber, ?int $limit = null): Collection;
 
     // Comments
     public function addComment(string $repo, int $number, string $body): Comment;
@@ -53,7 +56,7 @@ interface PlatformProvider
     /**
      * @return Collection<int, Comment>
      */
-    public function listComments(string $repo, int $number): Collection;
+    public function listComments(string $repo, int $number, ?int $limit = null): Collection;
 
     public function addReviewComment(string $repo, int $prNumber, string $body, string $commitId, string $path, int $line): Comment;
 
@@ -63,11 +66,10 @@ interface PlatformProvider
      * @param  string  $repo  Repository in owner/repo format
      * @param  int  $prNumber  Pull request number
      * @param  string  $body  Review body text
-     * @param  string  $event  Review event: APPROVE, REQUEST_CHANGES, or COMMENT
-     * @param  array<int, array{path: string, line: int, body: string}>  $comments  Inline comments
-     * @return array<string, mixed> The API response
+     * @param  ReviewEvent  $event  Review event
+     * @param  list<ReviewCommentInput>  $comments  Inline comments
      */
-    public function submitReview(string $repo, int $prNumber, string $body, string $event = 'COMMENT', array $comments = [], ?string $commitId = null): array;
+    public function submitReview(string $repo, int $prNumber, string $body, ReviewEvent $event = ReviewEvent::Comment, array $comments = [], ?string $commitId = null): Review;
 
     // Issues
     /**
@@ -80,12 +82,9 @@ interface PlatformProvider
     /**
      * @return Collection<int, Issue>
      */
-    public function listIssues(string $repo, string $state = 'open'): Collection;
+    public function listIssues(string $repo, ItemState $state = ItemState::Open, ?int $limit = null): Collection;
 
-    /**
-     * @param  array<string, mixed>  $data
-     */
-    public function updateIssue(string $repo, int $number, array $data): Issue;
+    public function updateIssue(string $repo, int $number, IssueUpdate $data): Issue;
 
     // CI/Checks
     public function getCiStatus(string $repo, string $ref): CiStatus;
@@ -93,7 +92,7 @@ interface PlatformProvider
     /**
      * @return Collection<int, CheckRun>
      */
-    public function listCheckRuns(string $repo, string $ref): Collection;
+    public function listCheckRuns(string $repo, string $ref, ?int $limit = null): Collection;
 
     // Labels
     /**
@@ -108,17 +107,25 @@ interface PlatformProvider
 
     // Notifications & Search
     /** @return Collection<int, Notification> */
-    public function listNotifications(bool $all = false): Collection;
+    public function listNotifications(bool $all = false, ?int $limit = null): Collection;
 
-    /** @return Collection<int, PullRequest> */
-    public function searchPullRequests(string $query): Collection;
+    /**
+     * Search pull requests. GitHub's search API caps results at 1000.
+     *
+     * @return Collection<int, PullRequest>
+     */
+    public function searchPullRequests(string $query, ?int $limit = null): Collection;
 
-    /** @return Collection<int, Issue> */
-    public function searchIssues(string $query): Collection;
+    /**
+     * Search issues. GitHub's search API caps results at 1000.
+     *
+     * @return Collection<int, Issue>
+     */
+    public function searchIssues(string $query, ?int $limit = null): Collection;
 
     // Webhooks
     /** @return Collection<int, RepositoryWebhook> */
-    public function listWebhooks(string $repo): Collection;
+    public function listWebhooks(string $repo, ?int $limit = null): Collection;
 
     /**
      * @param  list<string>  $events

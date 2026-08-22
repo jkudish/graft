@@ -6,6 +6,8 @@ namespace Graft\Data\Platform;
 
 use Carbon\CarbonImmutable;
 use Graft\Contracts\PlatformProvider;
+use Graft\Enums\Platform\ItemState;
+use Graft\Enums\Platform\MergeMethod;
 use Illuminate\Support\Collection;
 
 class PullRequest
@@ -14,13 +16,13 @@ class PullRequest
         public readonly int $number,
         public readonly string $title,
         public readonly string $body,
-        public readonly string $state,
+        public readonly ItemState $state,
         public readonly string $head,
         public readonly string $base,
         public readonly string $url,
         public readonly string $author,
         public readonly bool $draft,
-        public readonly bool $mergeable,
+        public readonly ?bool $mergeable,
         /** @var list<string> */
         public readonly array $labels = [],
         /** @var list<string> */
@@ -32,15 +34,7 @@ class PullRequest
         protected ?string $repo = null,
     ) {}
 
-    public function withProvider(PlatformProvider $provider, string $repo): static
-    {
-        $this->provider = $provider;
-        $this->repo = $repo;
-
-        return $this;
-    }
-
-    public function merge(?string $method = null): void
+    public function merge(?MergeMethod $method = null): void
     {
         $this->provider()->mergePullRequest($this->repo(), $this->number, $method);
     }
@@ -50,8 +44,7 @@ class PullRequest
         $this->provider()->closePullRequest($this->repo(), $this->number);
     }
 
-    /** @param array<string, mixed> $data */
-    public function update(array $data): PullRequest
+    public function update(PullRequestUpdate $data): PullRequest
     {
         return $this->provider()->updatePullRequest($this->repo(), $this->number, $data);
     }
@@ -63,9 +56,9 @@ class PullRequest
     }
 
     /** @return Collection<int, Review> */
-    public function listReviews(): Collection
+    public function listReviews(?int $limit = null): Collection
     {
-        return $this->provider()->listReviews($this->repo(), $this->number);
+        return $this->provider()->listReviews($this->repo(), $this->number, $limit);
     }
 
     public function addComment(string $body): Comment
@@ -74,9 +67,9 @@ class PullRequest
     }
 
     /** @return Collection<int, Comment> */
-    public function listComments(): Collection
+    public function listComments(?int $limit = null): Collection
     {
-        return $this->provider()->listComments($this->repo(), $this->number);
+        return $this->provider()->listComments($this->repo(), $this->number, $limit);
     }
 
     public function addReviewComment(string $body, string $commitId, string $path, int $line): Comment
@@ -102,11 +95,11 @@ class PullRequest
 
     protected function provider(): PlatformProvider
     {
-        return $this->provider ?? throw new \LogicException('PullRequest requires a platform provider. Call withProvider() first.');
+        return $this->provider ?? throw new \LogicException('PullRequest requires a platform provider.');
     }
 
     protected function repo(): string
     {
-        return $this->repo ?? throw new \LogicException('PullRequest requires a repo. Call withProvider() first.');
+        return $this->repo ?? throw new \LogicException('PullRequest requires a repo.');
     }
 }

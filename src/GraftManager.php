@@ -6,6 +6,7 @@ namespace Graft;
 
 use Graft\Contracts\GitManager;
 use Graft\Contracts\PlatformProvider;
+use Graft\Enums\Platform\Platform;
 use Graft\Platform\GitHubProvider;
 
 class GraftManager
@@ -26,9 +27,13 @@ class GraftManager
         return $this->git;
     }
 
-    public function platform(?string $name = null): PlatformProvider
+    public function platform(string|Platform|null $name = null): PlatformProvider
     {
-        $name ??= $this->config['platform']['default'] ?? 'github';
+        $name = match (true) {
+            $name instanceof Platform => $name->value,
+            is_string($name) => $name,
+            default => $this->config['platform']['default'] ?? Platform::GitHub->value,
+        };
 
         return $this->providers[$name] ??= $this->createProvider($name);
     }
@@ -48,8 +53,7 @@ class GraftManager
         $host = $this->extractHost($origin->fetchUrl);
 
         return match (true) {
-            str_contains($host, 'github') => $this->platform('github'),
-            // str_contains($host, 'gitlab') => $this->platform('gitlab'),
+            str_contains($host, 'github') => $this->platform(Platform::GitHub),
             default => $this->platform(),
         };
     }
@@ -59,10 +63,11 @@ class GraftManager
         $providerConfig = $this->config['platform']['providers'][$name]
             ?? throw new \RuntimeException("Platform provider [{$name}] is not configured.");
 
-        return match ($name) {
-            'github' => new GitHubProvider(
+        return match (Platform::tryFrom($name)) {
+            Platform::GitHub => new GitHubProvider(
                 token: $providerConfig['token'] ?? '',
                 baseUrl: $providerConfig['base_url'] ?? 'https://api.github.com',
+                apiVersion: $providerConfig['api_version'] ?? GitHubProvider::API_VERSION,
             ),
             default => throw new \RuntimeException("Unsupported platform provider: {$name}"),
         };

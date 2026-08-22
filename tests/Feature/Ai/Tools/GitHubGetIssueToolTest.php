@@ -5,9 +5,13 @@ declare(strict_types=1);
 use Carbon\CarbonImmutable;
 use Graft\Ai\Tools\GitHubGetIssueTool;
 use Graft\Data\Platform\Issue;
+use Graft\Enums\Platform\ItemState;
 use Graft\Facades\GitHub;
+use Graft\Tests\TestCase;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Ai\Tools\Request;
+
+uses(TestCase::class);
 
 beforeEach(function () {
     $this->tool = new GitHubGetIssueTool;
@@ -33,7 +37,7 @@ it('returns formatted issue data on success', function () {
         number: 7,
         title: 'Bug report',
         body: 'It broke',
-        state: 'open',
+        state: ItemState::Open,
         url: 'https://github.com/owner/repo/issues/7',
         author: 'alice',
         labels: ['bug'],

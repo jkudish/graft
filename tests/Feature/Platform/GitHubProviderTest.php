@@ -3,11 +3,24 @@
 declare(strict_types=1);
 
 use Graft\Data\Platform\Issue;
+use Graft\Data\Platform\IssueUpdate;
 use Graft\Data\Platform\Notification;
 use Graft\Data\Platform\PullRequest;
+use Graft\Data\Platform\PullRequestUpdate;
+use Graft\Data\Platform\Review;
+use Graft\Data\Platform\ReviewCommentInput;
+use Graft\Enums\Platform\CheckRunConclusion;
+use Graft\Enums\Platform\CheckRunStatus;
+use Graft\Enums\Platform\CiState;
+use Graft\Enums\Platform\ItemState;
+use Graft\Enums\Platform\MergeMethod;
+use Graft\Enums\Platform\ReviewEvent;
 use Graft\Exceptions\PlatformException;
 use Graft\Platform\GitHubProvider;
+use Graft\Tests\TestCase;
 use Illuminate\Support\Facades\Http;
+
+uses(TestCase::class);
 
 beforeEach(function () {
     $this->provider = new GitHubProvider(token: 'test-token', baseUrl: 'https://api.github.com');
@@ -110,7 +123,7 @@ describe('Pull Requests', function () {
 
     test('listPullRequests returns collection of PRs', function () {
         Http::fake([
-            'api.github.com/repos/owner/repo/pulls?state=open' => Http::response([
+            'api.github.com/repos/owner/repo/pulls*' => Http::response([
                 [
                     'number' => 1,
                     'title' => 'First PR',
@@ -146,13 +159,15 @@ describe('Pull Requests', function () {
             ]),
         ]);
 
-        $prs = $this->provider->listPullRequests('owner/repo', 'open');
+        $prs = $this->provider->listPullRequests('owner/repo', ItemState::Open);
 
         expect($prs)->toHaveCount(2);
         expect($prs->first()->number)->toBe(1);
         expect($prs->last()->number)->toBe(2);
 
-        Http::assertSent(fn ($request) => $request->url() === 'https://api.github.com/repos/owner/repo/pulls?state=open');
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/repos/owner/repo/pulls')
+            && $request['state'] === 'open'
+            && $request['per_page'] === 100);
     });
 
     test('updatePullRequest sends PATCH and returns updated PR', function () {
@@ -175,7 +190,7 @@ describe('Pull Requests', function () {
             ]),
         ]);
 
-        $pr = $this->provider->updatePullRequest('owner/repo', 1, ['title' => 'Updated Title', 'body' => 'Updated Description']);
+        $pr = $this->provider->updatePullRequest('owner/repo', 1, new PullRequestUpdate(title: 'Updated Title', body: 'Updated Description'));
 
         expect($pr->title)->toBe('Updated Title');
         expect($pr->body)->toBe('Updated Description');
@@ -193,7 +208,7 @@ describe('Pull Requests', function () {
             ]),
         ]);
 
-        $this->provider->mergePullRequest('owner/repo', 1, 'squash');
+        $this->provider->mergePullRequest('owner/repo', 1, MergeMethod::Squash);
 
         Http::assertSent(fn ($request) => $request->url() === 'https://api.github.com/repos/owner/repo/pulls/1/merge'
             && $request['merge_method'] === 'squash');
@@ -261,7 +276,7 @@ describe('Reviews', function () {
 
     test('listReviews returns collection of reviews', function () {
         Http::fake([
-            'api.github.com/repos/owner/repo/pulls/1/reviews' => Http::response([
+            'api.github.com/repos/owner/repo/pulls/1/reviews*' => Http::response([
                 [
                     'id' => 1,
                     'state' => 'APPROVED',
@@ -285,7 +300,43 @@ describe('Reviews', function () {
         expect($reviews->first()->author)->toBe('reviewer1');
         expect($reviews->last()->state)->toBe('CHANGES_REQUESTED');
 
-        Http::assertSent(fn ($request) => $request->url() === 'https://api.github.com/repos/owner/repo/pulls/1/reviews');
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/repos/owner/repo/pulls/1/reviews')
+            && $request['per_page'] === 100);
+    });
+
+    test('submitReview returns a Review and maps comments', function () {
+        Http::fake([
+            'api.github.com/repos/owner/repo/pulls/1/reviews' => Http::response([
+                'id' => 99,
+                'state' => 'COMMENTED',
+                'body' => 'Looks good',
+                'user' => ['login' => 'jkudish'],
+                'commit_id' => 'abc123',
+                'submitted_at' => '2026-01-01T00:00:00Z',
+            ]),
+        ]);
+
+        $review = $this->provider->submitReview(
+            'owner/repo',
+            1,
+            'Looks good',
+            ReviewEvent::Comment,
+            [new ReviewCommentInput(path: 'src/File.php', line: 10, body: 'nit')],
+            'abc123',
+        );
+
+        expect($review)->toBeInstanceOf(Review::class)
+            ->and($review->id)->toBe(99)
+            ->and($review->state)->toBe('COMMENTED')
+            ->and($review->body)->toBe('Looks good')
+            ->and($review->author)->toBe('jkudish')
+            ->and($review->commitId)->toBe('abc123')
+            ->and($review->submittedAt)->not->toBeNull();
+
+        Http::assertSent(fn ($request) => $request->url() === 'https://api.github.com/repos/owner/repo/pulls/1/reviews'
+            && $request['event'] === 'COMMENT'
+            && $request['commit_id'] === 'abc123'
+            && $request['comments'] === [['path' => 'src/File.php', 'line' => 10, 'body' => 'nit']]);
     });
 });
 
@@ -313,7 +364,7 @@ describe('Comments', function () {
 
     test('listComments returns collection of comments', function () {
         Http::fake([
-            'api.github.com/repos/owner/repo/issues/1/comments' => Http::response([
+            'api.github.com/repos/owner/repo/issues/1/comments*' => Http::response([
                 [
                     'id' => 1,
                     'body' => 'First comment',
@@ -337,7 +388,8 @@ describe('Comments', function () {
         expect($comments->first()->body)->toBe('First comment');
         expect($comments->last()->body)->toBe('Second comment');
 
-        Http::assertSent(fn ($request) => $request->url() === 'https://api.github.com/repos/owner/repo/issues/1/comments');
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/repos/owner/repo/issues/1/comments')
+            && $request['per_page'] === 100);
     });
 
     test('addReviewComment sends POST with path and line', function () {
@@ -416,7 +468,7 @@ describe('Issues', function () {
 
     test('listIssues returns collection of issues', function () {
         Http::fake([
-            'api.github.com/repos/owner/repo/issues?state=open' => Http::response([
+            'api.github.com/repos/owner/repo/issues*' => Http::response([
                 [
                     'number' => 1,
                     'title' => 'First Issue',
@@ -442,13 +494,15 @@ describe('Issues', function () {
             ]),
         ]);
 
-        $issues = $this->provider->listIssues('owner/repo', 'open');
+        $issues = $this->provider->listIssues('owner/repo', ItemState::Open);
 
         expect($issues)->toHaveCount(2);
         expect($issues->first()->number)->toBe(1);
         expect($issues->last()->number)->toBe(2);
 
-        Http::assertSent(fn ($request) => $request->url() === 'https://api.github.com/repos/owner/repo/issues?state=open');
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/repos/owner/repo/issues')
+            && $request['state'] === 'open'
+            && $request['per_page'] === 100);
     });
 
     test('updateIssue sends PATCH and returns updated issue', function () {
@@ -466,7 +520,7 @@ describe('Issues', function () {
             ]),
         ]);
 
-        $issue = $this->provider->updateIssue('owner/repo', 1, ['title' => 'Updated Issue']);
+        $issue = $this->provider->updateIssue('owner/repo', 1, new IssueUpdate(title: 'Updated Issue'));
 
         expect($issue->title)->toBe('Updated Issue');
 
@@ -482,7 +536,7 @@ describe('CI and Checks', function () {
                 'state' => 'success',
                 'statuses' => [],
             ]),
-            'api.github.com/repos/owner/repo/commits/abc123/check-runs' => Http::response([
+            'api.github.com/repos/owner/repo/commits/abc123/check-runs*' => Http::response([
                 'check_runs' => [
                     [
                         'id' => 1,
@@ -504,18 +558,18 @@ describe('CI and Checks', function () {
 
         $ciStatus = $this->provider->getCiStatus('owner/repo', 'abc123');
 
-        expect($ciStatus->state)->toBe('success');
+        expect($ciStatus->state)->toBe(CiState::Success);
         expect($ciStatus->checkRuns)->toHaveCount(2);
         expect($ciStatus->checkRuns->first()->name)->toBe('CI');
         expect($ciStatus->checkRuns->last()->name)->toBe('Tests');
 
         Http::assertSent(fn ($request) => $request->url() === 'https://api.github.com/repos/owner/repo/commits/abc123/status');
-        Http::assertSent(fn ($request) => $request->url() === 'https://api.github.com/repos/owner/repo/commits/abc123/check-runs');
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/repos/owner/repo/commits/abc123/check-runs'));
     });
 
     test('listCheckRuns returns collection of check runs', function () {
         Http::fake([
-            'api.github.com/repos/owner/repo/commits/abc123/check-runs' => Http::response([
+            'api.github.com/repos/owner/repo/commits/abc123/check-runs*' => Http::response([
                 'check_runs' => [
                     [
                         'id' => 1,
@@ -532,10 +586,10 @@ describe('CI and Checks', function () {
 
         expect($checkRuns)->toHaveCount(1);
         expect($checkRuns->first()->name)->toBe('CI');
-        expect($checkRuns->first()->status)->toBe('completed');
-        expect($checkRuns->first()->conclusion)->toBe('success');
+        expect($checkRuns->first()->status)->toBe(CheckRunStatus::Completed);
+        expect($checkRuns->first()->conclusion)->toBe(CheckRunConclusion::Success);
 
-        Http::assertSent(fn ($request) => $request->url() === 'https://api.github.com/repos/owner/repo/commits/abc123/check-runs');
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/repos/owner/repo/commits/abc123/check-runs'));
     });
 });
 
@@ -674,6 +728,9 @@ describe('Search', function () {
         expect($prs->first()->title)->toBe('Test PR');
         expect($prs->first()->author)->toBe('dev');
         expect($prs->first()->labels)->toBe(['enhancement']);
+        expect($prs->first()->mergeable)->toBeNull();
+        expect($prs->first()->head)->toBe('');
+        expect($prs->first()->base)->toBe('');
 
         Http::assertSent(fn ($request) => str_contains($request->url(), '/search/issues')
             && str_contains($request['q'], 'type:pr'));
@@ -745,13 +802,25 @@ describe('Error Handling', function () {
         $this->provider->createPullRequest('owner/repo', '', '', 'head', 'base');
     })->throws(PlatformException::class, 'Validation Failed');
 
-    test('throws PlatformException on 403 rate limit', function () {
+    test('throws PlatformException on 403 rate limit after retries', function () {
         Http::fake([
-            '*' => Http::response(['message' => 'API rate limit exceeded'], 403),
+            '*' => Http::response(
+                ['message' => 'API rate limit exceeded'],
+                403,
+                ['Retry-After' => '0', 'X-RateLimit-Remaining' => '0'],
+            ),
         ]);
 
-        $this->provider->listPullRequests('owner/repo');
-    })->throws(PlatformException::class, 'API rate limit exceeded');
+        try {
+            $this->provider->listPullRequests('owner/repo');
+            expect(false)->toBeTrue();
+        } catch (PlatformException $e) {
+            expect($e->getMessage())->toBe('API rate limit exceeded')
+                ->and($e->statusCode)->toBe(403);
+        }
+
+        Http::assertSentCount(GitHubProvider::RETRY_ATTEMPTS);
+    });
 
     test('PlatformException includes status code and response', function () {
         Http::fake([
@@ -765,5 +834,179 @@ describe('Error Handling', function () {
             expect($e->response)->toHaveKey('message');
             expect($e->response)->toHaveKey('errors');
         }
+    });
+
+    test('does not retry 401 or 404', function (int $status, string $message) {
+        Http::fake([
+            '*' => Http::response(['message' => $message], $status),
+        ]);
+
+        try {
+            $this->provider->getPullRequest('owner/repo', 1);
+            expect(false)->toBeTrue();
+        } catch (PlatformException $e) {
+            expect($e->statusCode)->toBe($status);
+        }
+
+        Http::assertSentCount(1);
+    })->with([
+        [401, 'Bad credentials'],
+        [404, 'Not Found'],
+    ]);
+
+    test('retries 502 then succeeds', function () {
+        Http::fake([
+            '*' => Http::sequence()
+                ->push(['message' => 'Bad gateway'], 502)
+                ->push([
+                    'number' => 1,
+                    'title' => 'Test PR',
+                    'body' => 'Description',
+                    'state' => 'open',
+                    'head' => ['ref' => 'feature'],
+                    'base' => ['ref' => 'main'],
+                    'html_url' => 'https://github.com/owner/repo/pull/1',
+                    'user' => ['login' => 'jkudish'],
+                    'draft' => false,
+                    'mergeable' => true,
+                    'labels' => [],
+                    'requested_reviewers' => [],
+                    'created_at' => '2026-01-01T00:00:00Z',
+                    'updated_at' => '2026-01-01T00:00:00Z',
+                ], 200),
+        ]);
+
+        $pr = $this->provider->getPullRequest('owner/repo', 1);
+
+        expect($pr->number)->toBe(1);
+        Http::assertSentCount(2);
+    });
+});
+
+describe('HTTP contract', function () {
+    test('sends GitHub API version, Accept, User-Agent, and token headers', function () {
+        Http::fake([
+            '*' => Http::response([
+                'number' => 1,
+                'title' => 'Test PR',
+                'body' => 'Description',
+                'state' => 'open',
+                'head' => ['ref' => 'feature'],
+                'base' => ['ref' => 'main'],
+                'html_url' => 'https://github.com/owner/repo/pull/1',
+                'user' => ['login' => 'jkudish'],
+                'draft' => false,
+                'mergeable' => true,
+                'labels' => [],
+                'requested_reviewers' => [],
+            ]),
+        ]);
+
+        $this->provider->getPullRequest('owner/repo', 1);
+
+        Http::assertSent(fn ($request) => $request->hasHeader('Accept', 'application/vnd.github+json')
+            && $request->hasHeader('X-GitHub-Api-Version', '2022-11-28')
+            && $request->hasHeader('User-Agent', 'jkudish-graft')
+            && $request->hasHeader('Authorization', 'Bearer test-token'));
+    });
+
+    test('merges two Link-paginated pages', function () {
+        Http::fake(function ($request) {
+            $page = (int) ($request['page'] ?? 1);
+            $payload = [
+                [
+                    'number' => $page,
+                    'title' => $page === 2 ? 'Second PR' : 'First PR',
+                    'body' => 'Description',
+                    'state' => 'open',
+                    'head' => ['ref' => 'feature'],
+                    'base' => ['ref' => 'main'],
+                    'html_url' => "https://github.com/owner/repo/pull/{$page}",
+                    'user' => ['login' => 'jkudish'],
+                    'draft' => false,
+                    'mergeable' => true,
+                    'labels' => [],
+                    'requested_reviewers' => [],
+                ],
+            ];
+
+            $headers = $page >= 2
+                ? []
+                : ['Link' => '<https://api.github.com/repos/owner/repo/pulls?page=2&per_page=100>; rel="next"'];
+
+            return Http::response($payload, 200, $headers);
+        });
+
+        $prs = $this->provider->listPullRequests('owner/repo');
+
+        expect($prs)->toHaveCount(2)
+            ->and($prs->pluck('number')->all())->toBe([1, 2]);
+        Http::assertSentCount(2);
+    });
+
+    test('preserves null mergeable when GitHub has not computed it', function () {
+        Http::fake([
+            '*' => Http::response([
+                'number' => 1,
+                'title' => 'Test PR',
+                'body' => 'Description',
+                'state' => 'open',
+                'head' => ['ref' => 'feature'],
+                'base' => ['ref' => 'main'],
+                'html_url' => 'https://github.com/owner/repo/pull/1',
+                'user' => ['login' => 'jkudish'],
+                'draft' => false,
+                'mergeable' => null,
+                'labels' => [],
+                'requested_reviewers' => [],
+            ]),
+        ]);
+
+        $pr = $this->provider->getPullRequest('owner/repo', 1);
+
+        expect($pr->mergeable)->toBeNull();
+    });
+
+    test('listIssues excludes pull requests', function () {
+        Http::fake([
+            '*' => Http::response([
+                [
+                    'number' => 1,
+                    'title' => 'Real issue',
+                    'body' => 'Issue',
+                    'state' => 'open',
+                    'html_url' => 'https://github.com/owner/repo/issues/1',
+                    'user' => ['login' => 'user1'],
+                    'labels' => [],
+                    'assignees' => [],
+                ],
+                [
+                    'number' => 2,
+                    'title' => 'Actually a PR',
+                    'body' => 'PR',
+                    'state' => 'open',
+                    'html_url' => 'https://github.com/owner/repo/pull/2',
+                    'user' => ['login' => 'user2'],
+                    'labels' => [],
+                    'assignees' => [],
+                    'pull_request' => ['html_url' => 'https://github.com/owner/repo/pull/2'],
+                ],
+                [
+                    'number' => 3,
+                    'title' => 'Another issue',
+                    'body' => 'Issue',
+                    'state' => 'open',
+                    'html_url' => 'https://github.com/owner/repo/issues/3',
+                    'user' => ['login' => 'user3'],
+                    'labels' => [],
+                    'assignees' => [],
+                ],
+            ]),
+        ]);
+
+        $issues = $this->provider->listIssues('owner/repo');
+
+        expect($issues)->toHaveCount(2)
+            ->and($issues->pluck('number')->all())->toBe([1, 3]);
     });
 });

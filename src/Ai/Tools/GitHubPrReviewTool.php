@@ -43,7 +43,7 @@ class GitHubPrReviewTool implements IdentifiableTool, Tool
                 'number' => $pr->number,
                 'title' => $pr->title,
                 'body' => $pr->body,
-                'state' => $pr->state,
+                'state' => $pr->state->value,
                 'head' => $pr->head,
                 'base' => $pr->base,
                 'author' => $pr->author,

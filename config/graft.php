@@ -35,6 +35,7 @@ return [
             'github' => [
                 'token' => env('GITHUB_TOKEN'),
                 'base_url' => env('GITHUB_API_URL', 'https://api.github.com'),
+                'api_version' => env('GITHUB_API_VERSION', '2022-11-28'),
 
                 /*
                  * Auto-configure git credential auth on repos Graft creates

@@ -5,8 +5,11 @@ declare(strict_types=1);
 use Graft\Ai\Tools\GitBranchesTool;
 use Graft\Data\Git\Branch;
 use Graft\Facades\Git;
+use Graft\Tests\TestCase;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Ai\Tools\Request;
+
+uses(TestCase::class);
 
 beforeEach(function () {
     $this->tool = new GitBranchesTool;

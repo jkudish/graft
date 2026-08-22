@@ -19,7 +19,7 @@
 
 ---
 
-Graft is the missing git-and-platform layer for Laravel. It puts everything you'd reach for `exec('git ...')` or a hand-rolled GitHub HTTP client to do behind two clean facades — `Git` and `GitHub` — and returns typed, readonly DTOs instead of raw output or arrays.
+Graft is the missing git-and-platform layer for Laravel. It puts everything you'd reach for `exec('git ...')` or a hand-rolled GitHub HTTP client to do behind two clean facades — `Git` and `GitHub` — and returns typed DTOs instead of raw output or arrays.
 
 It was built for the kind of app that needs to *do real work* in real repos: tools that orchestrate AI coding agents, dashboards that open and merge PRs on your behalf, internal automation that branches, commits, and ships. It scales from "create a tag" to "spin up a worktree, run a series of changes, open a PR, request review, watch CI, merge, and clean up" — without you ever leaving Laravel idioms.
 
@@ -55,7 +55,7 @@ $pr->addLabels(['enhancement']);
 - **`Git` facade** — branches, commits, index, remotes, merge, rebase, cherry-pick, tags, stash, worktrees, blame, clean.
 - **`GitHub` facade** — pull requests, issues, reviews, comments, CI status, labels, repository info.
 - **Scoped repository** — `Git::repo($path)` binds both surfaces to a single repo and auto-detects `owner/repo` from the origin remote.
-- **Typed DTOs** — `Branch`, `Commit`, `Status`, `MergeResult`, `Stash`, `Worktree`, `PullRequest`, `Issue`, `Review`, `CheckRun`, `CiStatus`, and more — all readonly, all with named properties.
+- **Typed DTOs** — `Branch`, `Commit`, `Status`, `MergeResult`, `Stash`, `Worktree`, `Review`, `CheckRun`, `CiStatus`, and more are readonly. `PullRequest` and `Issue` are active objects with named properties plus action methods.
 - **Recording fakes** — `Git::fake()` and `GitHub::fake()` swap the real implementations for in-memory recorders with semantic assertions and configurable return values / exceptions.
 - **Errors with context** — `MergeConflictException` exposes the conflicting files; `PlatformException` exposes the status code and the response body.
 
@@ -212,30 +212,43 @@ The `GitHub` facade works with any repository by passing `owner/repo` directly.
 ### Pull Requests
 
 ```php
+use Graft\Data\Platform\PullRequestUpdate;
+use Graft\Enums\Platform\ItemState;
+use Graft\Enums\Platform\MergeMethod;
+
 $pr  = GitHub::createPullRequest('owner/repo', 'Title', 'Body', 'feature', 'main', draft: true);
 $pr  = GitHub::getPullRequest('owner/repo', 42);
-$prs = GitHub::listPullRequests('owner/repo', state: 'open');
+$prs = GitHub::listPullRequests('owner/repo', ItemState::Open);
 
-GitHub::updatePullRequest('owner/repo', 42, ['title' => 'New title']);
-GitHub::mergePullRequest('owner/repo', 42, method: 'squash');
+GitHub::updatePullRequest('owner/repo', 42, new PullRequestUpdate(title: 'New title'));
+GitHub::mergePullRequest('owner/repo', 42, MergeMethod::Squash);
 GitHub::closePullRequest('owner/repo', 42);
 ```
 
 ### Issues
 
 ```php
+use Graft\Data\Platform\IssueUpdate;
+use Graft\Enums\Platform\ItemState;
+
 $issue = GitHub::createIssue('owner/repo', 'Bug', 'Details', labels: ['bug']);
 $issue = GitHub::getIssue('owner/repo', 10);
 
-GitHub::listIssues('owner/repo', state: 'open');
-GitHub::updateIssue('owner/repo', 10, ['state' => 'closed']);
+GitHub::listIssues('owner/repo', ItemState::Open);
+GitHub::updateIssue('owner/repo', 10, new IssueUpdate(state: ItemState::Closed));
 ```
 
 ### Reviews, Comments, CI, Labels
 
 ```php
+use Graft\Data\Platform\ReviewCommentInput;
+use Graft\Enums\Platform\ReviewEvent;
+
 GitHub::requestReview('owner/repo', 42, ['reviewer1']);
 GitHub::listReviews('owner/repo', 42);                   // Collection<Review>
+GitHub::submitReview('owner/repo', 42, 'LGTM', ReviewEvent::Approve, [
+    new ReviewCommentInput(path: 'src/File.php', line: 15, body: 'Nit'),
+]);
 
 GitHub::addComment('owner/repo', 42, 'Looks good!');
 GitHub::addReviewComment('owner/repo', 42, 'Nit', 'abc123', 'src/File.php', 15);
@@ -322,11 +335,15 @@ The tools call into the `Git` and `GitHub` facades under the hood, so `Git::fake
 `PullRequest` and `Issue` DTOs returned from the platform provider carry a reference back to the provider so you can act on them directly.
 
 ```php
+use Graft\Data\Platform\IssueUpdate;
+use Graft\Data\Platform\PullRequestUpdate;
+use Graft\Enums\Platform\MergeMethod;
+
 $pr = GitHub::getPullRequest('owner/repo', 42);
 
-$pr->merge(method: 'squash');
+$pr->merge(MergeMethod::Squash);
 $pr->close();
-$pr->update(['title' => 'Updated']);
+$pr->update(new PullRequestUpdate(title: 'Updated'));
 $pr->requestReview(['teammate']);
 $pr->addComment('Ship it!');
 $pr->addReviewComment('Fix this', 'abc123', 'src/File.php', 10);
@@ -336,7 +353,7 @@ $pr->addLabels(['approved']);
 $issue = GitHub::getIssue('owner/repo', 10);
 
 $issue->close();
-$issue->update(['title' => 'Updated']);
+$issue->update(new IssueUpdate(title: 'Updated'));
 $issue->addComment('Fixed in #42');
 $issue->addLabels(['resolved']);
 ```
@@ -535,6 +552,7 @@ return [
 | `GRAFT_TIMEOUT` | `60` | Timeout in seconds for git commands |
 | `GRAFT_PLATFORM` | `github` | Default platform provider |
 | `GITHUB_API_URL` | `https://api.github.com` | GitHub API base URL (for GitHub Enterprise) |
+| `GITHUB_API_VERSION` | `2022-11-28` | GitHub REST API version header |
 | `GRAFT_GIT_CREDENTIALS_ENABLED` | `true` | Auto-install a host-scoped credential helper on init/clone/worktree |
 | `GRAFT_GIT_CREDENTIALS_MODE` | `baked` | `baked` (token in .git/config) or `env` (token via `GRAFT_GITHUB_TOKEN`) |
 | `GRAFT_GIT_CREDENTIALS_USERNAME` | `x-access-token` | Username sent to the helper (PATs ignore it; GitHub Apps need this) |
@@ -542,11 +560,11 @@ return [
 
 ## Data Transfer Objects
 
-All DTOs are readonly classes with typed properties.
+Git DTOs are readonly classes with typed properties. `PullRequest` and `Issue` are active objects (constructed with an optional provider + repo) rather than readonly classes.
 
 **Git:** `Branch`, `Commit`, `Status`, `Remote`, `MergeResult`, `Stash`, `Worktree`, `Blame`
 
-**Platform:** `PullRequest` (active), `Issue` (active), `Comment`, `Review`, `CheckRun`, `CiStatus`, `Repository`
+**Platform:** `PullRequest` (active), `Issue` (active), `Comment`, `Review`, `CheckRun`, `CiStatus`, `Repository`, `PullRequestUpdate`, `IssueUpdate`, `ReviewCommentInput`
 
 ## Contributing
 

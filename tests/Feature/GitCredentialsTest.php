@@ -5,13 +5,15 @@ declare(strict_types=1);
 namespace Graft\Tests\Feature;
 
 use Graft\Auth\GitCredentialHelper;
+use Graft\Enums\Git\GitCredentialMode;
 use Graft\Exceptions\ProcessException;
 use Graft\ProcessGitManager;
 use Graft\Tests\Concerns\CreatesTestRepositories;
+use Graft\Tests\TestCase;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\Process\Process;
 
-uses(CreatesTestRepositories::class);
+uses(TestCase::class, CreatesTestRepositories::class);
 
 /**
  * Captures the env Symfony Process is constructed with so tests can verify
@@ -92,7 +94,7 @@ test('baked mode writes literal token to .git/config after clone', function () {
 test('env mode writes placeholder, never bakes token', function () {
     $helper = new GitCredentialHelper(
         token: 'ghp_env_secret',
-        mode: GitCredentialHelper::MODE_ENV,
+        mode: GitCredentialMode::Env,
     );
     $manager = new ProcessGitManager(credentialHelper: $helper);
 
@@ -107,7 +109,7 @@ test('env mode writes placeholder, never bakes token', function () {
 test('env mode injects GRAFT_GITHUB_TOKEN into Symfony Process env', function () {
     $helper = new GitCredentialHelper(
         token: 'ghp_proc_env',
-        mode: GitCredentialHelper::MODE_ENV,
+        mode: GitCredentialMode::Env,
     );
     $manager = new SpyingProcessGitManager(credentialHelper: $helper);
 

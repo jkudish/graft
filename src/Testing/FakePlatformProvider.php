@@ -9,10 +9,18 @@ use Graft\Contracts\PlatformProvider;
 use Graft\Data\Platform\CiStatus;
 use Graft\Data\Platform\Comment;
 use Graft\Data\Platform\Issue;
+use Graft\Data\Platform\IssueUpdate;
 use Graft\Data\Platform\Notification;
 use Graft\Data\Platform\PullRequest;
+use Graft\Data\Platform\PullRequestUpdate;
 use Graft\Data\Platform\Repository;
 use Graft\Data\Platform\RepositoryWebhook;
+use Graft\Data\Platform\Review;
+use Graft\Data\Platform\ReviewCommentInput;
+use Graft\Enums\Platform\CiState;
+use Graft\Enums\Platform\ItemState;
+use Graft\Enums\Platform\MergeMethod;
+use Graft\Enums\Platform\ReviewEvent;
 use Illuminate\Support\Collection;
 use PHPUnit\Framework\Assert;
 
@@ -130,7 +138,7 @@ class FakePlatformProvider implements PlatformProvider
                 return false;
             }
 
-            return isset($args[2]['state']) && $args[2]['state'] === 'closed';
+            return $args[2] instanceof IssueUpdate && $args[2]->state === ItemState::Closed;
         });
     }
 
@@ -222,15 +230,16 @@ class FakePlatformProvider implements PlatformProvider
         return $this->returnValues[$method] ?? null;
     }
 
+    #[\Override]
     public function createPullRequest(string $repo, string $title, string $body, string $head, string $base, bool $draft = false): PullRequest
     {
         $result = $this->record('createPullRequest', [$repo, $title, $body, $head, $base, $draft]);
 
-        return $result ?? (new PullRequest(
+        return $result ?? new PullRequest(
             number: 1,
             title: $title,
             body: $body,
-            state: 'open',
+            state: ItemState::Open,
             head: $head,
             base: $base,
             url: 'https://github.com/'.$repo.'/pull/1',
@@ -240,70 +249,85 @@ class FakePlatformProvider implements PlatformProvider
             labels: [],
             reviewers: [],
             createdAt: CarbonImmutable::now(),
-        ))->withProvider($this, $repo);
+            provider: $this,
+            repo: $repo,
+        );
     }
 
+    #[\Override]
     public function getPullRequest(string $repo, int $number): PullRequest
     {
         $result = $this->record('getPullRequest', [$repo, $number]);
 
-        return $result ?? (new PullRequest(
+        return $result ?? new PullRequest(
             number: $number,
             title: 'Test PR',
             body: 'Test body',
-            state: 'open',
+            state: ItemState::Open,
             head: 'feature-branch',
             base: 'main',
             url: 'https://github.com/'.$repo.'/pull/'.$number,
             author: 'test-user',
             draft: false,
             mergeable: true,
-        ))->withProvider($this, $repo);
+            provider: $this,
+            repo: $repo,
+        );
     }
 
-    public function listPullRequests(string $repo, string $state = 'open'): Collection
+    #[\Override]
+    public function listPullRequests(string $repo, ItemState $state = ItemState::Open, ?int $limit = null): Collection
     {
-        return $this->record('listPullRequests', [$repo, $state]) ?? collect();
+        return $this->record('listPullRequests', [$repo, $state, $limit]) ?? collect();
     }
 
-    public function updatePullRequest(string $repo, int $number, array $data): PullRequest
+    #[\Override]
+    public function updatePullRequest(string $repo, int $number, PullRequestUpdate $data): PullRequest
     {
         $result = $this->record('updatePullRequest', [$repo, $number, $data]);
 
-        return $result ?? (new PullRequest(
+        return $result ?? new PullRequest(
             number: $number,
-            title: $data['title'] ?? 'Updated PR',
-            body: $data['body'] ?? 'Updated body',
-            state: $data['state'] ?? 'open',
+            title: $data->title ?? 'Updated PR',
+            body: $data->body ?? 'Updated body',
+            state: $data->state ?? ItemState::Open,
             head: 'feature-branch',
-            base: 'main',
+            base: $data->base ?? 'main',
             url: 'https://github.com/'.$repo.'/pull/'.$number,
             author: 'test-user',
-            draft: $data['draft'] ?? false,
+            draft: $data->draft ?? false,
             mergeable: true,
-        ))->withProvider($this, $repo);
+            provider: $this,
+            repo: $repo,
+        );
     }
 
-    public function mergePullRequest(string $repo, int $number, ?string $method = null): void
+    #[\Override]
+    public function mergePullRequest(string $repo, int $number, ?MergeMethod $method = null): void
     {
         $this->record('mergePullRequest', [$repo, $number, $method]);
     }
 
+    #[\Override]
     public function closePullRequest(string $repo, int $number): void
     {
         $this->record('closePullRequest', [$repo, $number]);
     }
 
+    /** @param list<string> $reviewers */
+    #[\Override]
     public function requestReview(string $repo, int $prNumber, array $reviewers): void
     {
         $this->record('requestReview', [$repo, $prNumber, $reviewers]);
     }
 
-    public function listReviews(string $repo, int $prNumber): Collection
+    #[\Override]
+    public function listReviews(string $repo, int $prNumber, ?int $limit = null): Collection
     {
-        return $this->record('listReviews', [$repo, $prNumber]) ?? collect();
+        return $this->record('listReviews', [$repo, $prNumber, $limit]) ?? collect();
     }
 
+    #[\Override]
     public function addComment(string $repo, int $number, string $body): Comment
     {
         $result = $this->record('addComment', [$repo, $number, $body]);
@@ -316,11 +340,13 @@ class FakePlatformProvider implements PlatformProvider
         );
     }
 
-    public function listComments(string $repo, int $number): Collection
+    #[\Override]
+    public function listComments(string $repo, int $number, ?int $limit = null): Collection
     {
-        return $this->record('listComments', [$repo, $number]) ?? collect();
+        return $this->record('listComments', [$repo, $number, $limit]) ?? collect();
     }
 
+    #[\Override]
     public function addReviewComment(string $repo, int $prNumber, string $body, string $commitId, string $path, int $line): Comment
     {
         $result = $this->record('addReviewComment', [$repo, $prNumber, $body, $commitId, $path, $line]);
@@ -334,100 +360,117 @@ class FakePlatformProvider implements PlatformProvider
     }
 
     /**
-     * @param  array<int, array{path: string, line: int, body: string}>  $comments
-     * @return array<string, mixed>
+     * @param  list<ReviewCommentInput>  $comments
      */
-    public function submitReview(string $repo, int $prNumber, string $body, string $event = 'COMMENT', array $comments = [], ?string $commitId = null): array
+    #[\Override]
+    public function submitReview(string $repo, int $prNumber, string $body, ReviewEvent $event = ReviewEvent::Comment, array $comments = [], ?string $commitId = null): Review
     {
         $result = $this->record('submitReview', [$repo, $prNumber, $body, $event, $comments, $commitId]);
 
-        $response = [
-            'body' => $body,
-            'event' => $event,
-            'comments' => $comments,
-        ];
-
-        if ($commitId !== null) {
-            $response['commit_id'] = $commitId;
-        }
-
-        return $result ?? $response;
+        return $result ?? new Review(
+            id: 1,
+            state: match ($event) {
+                ReviewEvent::Approve => 'APPROVED',
+                ReviewEvent::RequestChanges => 'CHANGES_REQUESTED',
+                ReviewEvent::Comment => 'COMMENTED',
+            },
+            body: $body,
+            author: 'test-user',
+            commitId: $commitId,
+        );
     }
 
+    /** @param list<string> $labels */
+    #[\Override]
     public function createIssue(string $repo, string $title, string $body, array $labels = []): Issue
     {
         $result = $this->record('createIssue', [$repo, $title, $body, $labels]);
 
-        return $result ?? (new Issue(
+        return $result ?? new Issue(
             number: 1,
             title: $title,
             body: $body,
-            state: 'open',
+            state: ItemState::Open,
             url: 'https://github.com/'.$repo.'/issues/1',
             author: 'test-user',
             labels: $labels,
             createdAt: CarbonImmutable::now(),
-        ))->withProvider($this, $repo);
+            provider: $this,
+            repo: $repo,
+        );
     }
 
+    #[\Override]
     public function getIssue(string $repo, int $number): Issue
     {
         $result = $this->record('getIssue', [$repo, $number]);
 
-        return $result ?? (new Issue(
+        return $result ?? new Issue(
             number: $number,
             title: 'Test Issue',
             body: 'Test body',
-            state: 'open',
+            state: ItemState::Open,
             url: 'https://github.com/'.$repo.'/issues/'.$number,
             author: 'test-user',
-        ))->withProvider($this, $repo);
+            provider: $this,
+            repo: $repo,
+        );
     }
 
-    public function listIssues(string $repo, string $state = 'open'): Collection
+    #[\Override]
+    public function listIssues(string $repo, ItemState $state = ItemState::Open, ?int $limit = null): Collection
     {
-        return $this->record('listIssues', [$repo, $state]) ?? collect();
+        return $this->record('listIssues', [$repo, $state, $limit]) ?? collect();
     }
 
-    public function updateIssue(string $repo, int $number, array $data): Issue
+    #[\Override]
+    public function updateIssue(string $repo, int $number, IssueUpdate $data): Issue
     {
         $result = $this->record('updateIssue', [$repo, $number, $data]);
 
-        return $result ?? (new Issue(
+        return $result ?? new Issue(
             number: $number,
-            title: $data['title'] ?? 'Updated Issue',
-            body: $data['body'] ?? 'Updated body',
-            state: $data['state'] ?? 'open',
+            title: $data->title ?? 'Updated Issue',
+            body: $data->body ?? 'Updated body',
+            state: $data->state ?? ItemState::Open,
             url: 'https://github.com/'.$repo.'/issues/'.$number,
             author: 'test-user',
-        ))->withProvider($this, $repo);
+            provider: $this,
+            repo: $repo,
+        );
     }
 
+    #[\Override]
     public function getCiStatus(string $repo, string $ref): CiStatus
     {
         $result = $this->record('getCiStatus', [$repo, $ref]);
 
         return $result ?? new CiStatus(
-            state: 'success',
+            state: CiState::Success,
             checkRuns: collect(),
         );
     }
 
-    public function listCheckRuns(string $repo, string $ref): Collection
+    #[\Override]
+    public function listCheckRuns(string $repo, string $ref, ?int $limit = null): Collection
     {
-        return $this->record('listCheckRuns', [$repo, $ref]) ?? collect();
+        return $this->record('listCheckRuns', [$repo, $ref, $limit]) ?? collect();
     }
 
+    /** @param list<string> $labels */
+    #[\Override]
     public function addLabels(string $repo, int $number, array $labels): void
     {
         $this->record('addLabels', [$repo, $number, $labels]);
     }
 
+    #[\Override]
     public function removeLabel(string $repo, int $number, string $label): void
     {
         $this->record('removeLabel', [$repo, $number, $label]);
     }
 
+    #[\Override]
     public function getRepository(string $repo): Repository
     {
         $result = $this->record('getRepository', [$repo]);
@@ -443,29 +486,35 @@ class FakePlatformProvider implements PlatformProvider
     }
 
     /** @return Collection<int, Notification> */
-    public function listNotifications(bool $all = false): Collection
+    #[\Override]
+    public function listNotifications(bool $all = false, ?int $limit = null): Collection
     {
-        return $this->record('listNotifications', [$all]) ?? collect();
+        return $this->record('listNotifications', [$all, $limit]) ?? collect();
     }
 
     /** @return Collection<int, PullRequest> */
-    public function searchPullRequests(string $query): Collection
+    #[\Override]
+    public function searchPullRequests(string $query, ?int $limit = null): Collection
     {
-        return $this->record('searchPullRequests', [$query]) ?? collect();
+        return $this->record('searchPullRequests', [$query, $limit]) ?? collect();
     }
 
     /** @return Collection<int, Issue> */
-    public function searchIssues(string $query): Collection
+    #[\Override]
+    public function searchIssues(string $query, ?int $limit = null): Collection
     {
-        return $this->record('searchIssues', [$query]) ?? collect();
+        return $this->record('searchIssues', [$query, $limit]) ?? collect();
     }
 
     /** @return Collection<int, RepositoryWebhook> */
-    public function listWebhooks(string $repo): Collection
+    #[\Override]
+    public function listWebhooks(string $repo, ?int $limit = null): Collection
     {
-        return $this->record('listWebhooks', [$repo]) ?? collect();
+        return $this->record('listWebhooks', [$repo, $limit]) ?? collect();
     }
 
+    /** @param list<string> $events */
+    #[\Override]
     public function createWebhook(string $repo, string $url, array $events, ?string $secret = null): RepositoryWebhook
     {
         $result = $this->record('createWebhook', [$repo, $url, $events, $secret]);

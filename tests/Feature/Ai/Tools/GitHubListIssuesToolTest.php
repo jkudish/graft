@@ -4,9 +4,13 @@ declare(strict_types=1);
 
 use Graft\Ai\Tools\GitHubListIssuesTool;
 use Graft\Data\Platform\Issue;
+use Graft\Enums\Platform\ItemState;
 use Graft\Facades\GitHub;
+use Graft\Tests\TestCase;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Laravel\Ai\Tools\Request;
+
+uses(TestCase::class);
 
 beforeEach(function () {
     $this->tool = new GitHubListIssuesTool;
@@ -33,7 +37,7 @@ it('returns formatted issues data on success', function () {
             number: 1,
             title: 'First',
             body: '',
-            state: 'open',
+            state: ItemState::Open,
             url: 'https://github.com/owner/repo/issues/1',
             author: 'alice',
             labels: ['bug'],
@@ -42,7 +46,7 @@ it('returns formatted issues data on success', function () {
             number: 2,
             title: 'Second',
             body: '',
-            state: 'open',
+            state: ItemState::Open,
             url: 'https://github.com/owner/repo/issues/2',
             author: 'bob',
         ),
@@ -56,7 +60,7 @@ it('returns formatted issues data on success', function () {
         ->and($data['issues'][0]['labels'])->toBe(['bug'])
         ->and($data['issues'][1]['author'])->toBe('bob');
 
-    $fake->assertCalled('listIssues', fn ($args) => $args[0] === 'owner/repo' && $args[1] === 'open');
+    $fake->assertCalled('listIssues', fn ($args) => $args[0] === 'owner/repo' && $args[1] === ItemState::Open);
 });
 
 it('returns a "no issues" message when collection is empty', function () {

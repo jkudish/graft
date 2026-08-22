@@ -6,6 +6,7 @@ namespace Graft\Data\Platform;
 
 use Carbon\CarbonImmutable;
 use Graft\Contracts\PlatformProvider;
+use Graft\Enums\Platform\ItemState;
 use Illuminate\Support\Collection;
 
 class Issue
@@ -14,7 +15,7 @@ class Issue
         public readonly int $number,
         public readonly string $title,
         public readonly string $body,
-        public readonly string $state,
+        public readonly ItemState $state,
         public readonly string $url,
         public readonly string $author,
         /** @var list<string> */
@@ -26,23 +27,14 @@ class Issue
         protected ?string $repo = null,
     ) {}
 
-    public function withProvider(PlatformProvider $provider, string $repo): static
-    {
-        $this->provider = $provider;
-        $this->repo = $repo;
-
-        return $this;
-    }
-
-    /** @param array<string, mixed> $data */
-    public function update(array $data): Issue
+    public function update(IssueUpdate $data): Issue
     {
         return $this->provider()->updateIssue($this->repo(), $this->number, $data);
     }
 
     public function close(): void
     {
-        $this->update(['state' => 'closed']);
+        $this->update(new IssueUpdate(state: ItemState::Closed));
     }
 
     public function addComment(string $body): Comment
@@ -51,9 +43,9 @@ class Issue
     }
 
     /** @return Collection<int, Comment> */
-    public function listComments(): Collection
+    public function listComments(?int $limit = null): Collection
     {
-        return $this->provider()->listComments($this->repo(), $this->number);
+        return $this->provider()->listComments($this->repo(), $this->number, $limit);
     }
 
     /** @param list<string> $labels */
@@ -69,11 +61,11 @@ class Issue
 
     protected function provider(): PlatformProvider
     {
-        return $this->provider ?? throw new \LogicException('Issue requires a platform provider. Call withProvider() first.');
+        return $this->provider ?? throw new \LogicException('Issue requires a platform provider.');
     }
 
     protected function repo(): string
     {
-        return $this->repo ?? throw new \LogicException('Issue requires a repo. Call withProvider() first.');
+        return $this->repo ?? throw new \LogicException('Issue requires a repo.');
     }
 }

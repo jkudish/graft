@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Graft\Auth\GitCredentialHelper;
+use Graft\Enums\Git\GitCredentialMode;
 use Symfony\Component\Process\Process;
 
 test('isEnabled is false when token is null', function () {
@@ -27,11 +28,11 @@ test('isEnabled is true with token in baked mode', function () {
     $helper = new GitCredentialHelper(token: 'ghp_test');
 
     expect($helper->isEnabled())->toBeTrue()
-        ->and($helper->mode())->toBe(GitCredentialHelper::MODE_BAKED);
+        ->and($helper->mode())->toBe(GitCredentialMode::Baked);
 });
 
 test('isEnabled is true with token in env mode', function () {
-    $helper = new GitCredentialHelper(token: 'ghp_test', mode: GitCredentialHelper::MODE_ENV);
+    $helper = new GitCredentialHelper(token: 'ghp_test', mode: GitCredentialMode::Env);
 
     expect($helper->isEnabled())->toBeTrue();
 });
@@ -84,7 +85,7 @@ test('baked mode bakes literal token into helper', function () {
 test('env mode uses GRAFT_GITHUB_TOKEN placeholder', function () {
     $helper = new GitCredentialHelper(
         token: 'ghp_secret',
-        mode: GitCredentialHelper::MODE_ENV,
+        mode: GitCredentialMode::Env,
     );
 
     expect($helper->configValue())
@@ -130,7 +131,7 @@ test('processEnv is empty in baked mode', function () {
 test('processEnv returns GRAFT_GITHUB_TOKEN in env mode', function () {
     $helper = new GitCredentialHelper(
         token: 'ghp_secret',
-        mode: GitCredentialHelper::MODE_ENV,
+        mode: GitCredentialMode::Env,
     );
 
     expect($helper->processEnv())->toBe([
@@ -142,7 +143,7 @@ test('processEnv is empty when disabled', function () {
     $helper = new GitCredentialHelper(
         token: 'ghp_secret',
         enabled: false,
-        mode: GitCredentialHelper::MODE_ENV,
+        mode: GitCredentialMode::Env,
     );
 
     expect($helper->processEnv())->toBe([]);
@@ -151,7 +152,7 @@ test('processEnv is empty when disabled', function () {
 test('processEnv is empty when token is null', function () {
     $helper = new GitCredentialHelper(
         token: null,
-        mode: GitCredentialHelper::MODE_ENV,
+        mode: GitCredentialMode::Env,
     );
 
     expect($helper->processEnv())->toBe([]);
@@ -220,7 +221,7 @@ test('gitConfigEnvForBootstrap returns GIT_CONFIG_* vars when enabled', function
 test('gitConfigEnvForBootstrap value uses placeholder in env mode', function () {
     $helper = new GitCredentialHelper(
         token: 'ghp_secret',
-        mode: GitCredentialHelper::MODE_ENV,
+        mode: GitCredentialMode::Env,
     );
 
     $env = $helper->gitConfigEnvForBootstrap();
@@ -237,7 +238,7 @@ test('env mode shell expansion produces the token at lookup time', function () {
     // helper's stdout contains the literal token.
     $helper = new GitCredentialHelper(
         token: 'ghp_secret_e2e',
-        mode: GitCredentialHelper::MODE_ENV,
+        mode: GitCredentialMode::Env,
     );
 
     $command = substr($helper->configValue(), 1);

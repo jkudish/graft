@@ -19,6 +19,7 @@ use Graft\Data\Platform\CiStatus;
 use Graft\Data\Platform\Issue;
 use Graft\Data\Platform\PullRequest;
 use Graft\Data\Platform\Repository;
+use Graft\Enums\Platform\ItemState;
 use Illuminate\Support\Collection;
 
 class ScopedRepository
@@ -300,9 +301,9 @@ class ScopedRepository
     /**
      * @return Collection<int, PullRequest>
      */
-    public function listPullRequests(string $state = 'open'): Collection
+    public function listPullRequests(ItemState $state = ItemState::Open, ?int $limit = null): Collection
     {
-        return $this->platform()->listPullRequests($this->detectRepo(), $state);
+        return $this->platform()->listPullRequests($this->detectRepo(), $state, $limit);
     }
 
     /**
@@ -321,9 +322,9 @@ class ScopedRepository
     /**
      * @return Collection<int, Issue>
      */
-    public function listIssues(string $state = 'open'): Collection
+    public function listIssues(ItemState $state = ItemState::Open, ?int $limit = null): Collection
     {
-        return $this->platform()->listIssues($this->detectRepo(), $state);
+        return $this->platform()->listIssues($this->detectRepo(), $state, $limit);
     }
 
     public function getCiStatus(string $ref): CiStatus

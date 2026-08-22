@@ -57,7 +57,7 @@ class GitHubCreateIssueTool implements IdentifiableTool, Tool
             $data = [
                 'number' => $issue->number,
                 'title' => $issue->title,
-                'state' => $issue->state,
+                'state' => $issue->state->value,
                 'url' => $issue->url,
                 'labels' => $issue->labels,
             ];

@@ -10,25 +10,52 @@ use Graft\Data\Platform\CheckRun;
 use Graft\Data\Platform\CiStatus;
 use Graft\Data\Platform\Comment;
 use Graft\Data\Platform\Issue;
+use Graft\Data\Platform\IssueUpdate;
 use Graft\Data\Platform\Notification;
 use Graft\Data\Platform\PullRequest;
+use Graft\Data\Platform\PullRequestUpdate;
 use Graft\Data\Platform\Repository;
 use Graft\Data\Platform\RepositoryWebhook;
 use Graft\Data\Platform\Review;
+use Graft\Data\Platform\ReviewCommentInput;
+use Graft\Enums\Platform\CheckRunConclusion;
+use Graft\Enums\Platform\CheckRunStatus;
+use Graft\Enums\Platform\CiState;
+use Graft\Enums\Platform\ItemState;
+use Graft\Enums\Platform\MergeMethod;
+use Graft\Enums\Platform\ReviewEvent;
 use Graft\Exceptions\PlatformException;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\RequestException;
+use Illuminate\Http\Client\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
+use SensitiveParameter;
+use Throwable;
 
 class GitHubProvider implements PlatformProvider
 {
+    public const API_VERSION = '2022-11-28';
+
+    public const USER_AGENT = 'jkudish-graft';
+
+    public const PER_PAGE = 100;
+
+    public const MAX_PAGES = 10;
+
+    public const RETRY_ATTEMPTS = 4;
+
     public function __construct(
+        #[SensitiveParameter]
         protected string $token,
         protected string $baseUrl = 'https://api.github.com',
+        protected string $apiVersion = self::API_VERSION,
     ) {}
 
     // ── Pull Requests ───────────────────────────────────────
 
+    #[\Override]
     public function createPullRequest(string $repo, string $title, string $body, string $head, string $base, bool $draft = false): PullRequest
     {
         $data = $this->request('post', "/repos/{$repo}/pulls", [
@@ -42,6 +69,7 @@ class GitHubProvider implements PlatformProvider
         return $this->mapPullRequest($data, $repo);
     }
 
+    #[\Override]
     public function getPullRequest(string $repo, int $number): PullRequest
     {
         $data = $this->request('get', "/repos/{$repo}/pulls/{$number}");
@@ -50,39 +78,43 @@ class GitHubProvider implements PlatformProvider
     }
 
     /** @return Collection<int, PullRequest> */
-    public function listPullRequests(string $repo, string $state = 'open'): Collection
+    #[\Override]
+    public function listPullRequests(string $repo, ItemState $state = ItemState::Open, ?int $limit = null): Collection
     {
-        $data = $this->request('get', "/repos/{$repo}/pulls", ['state' => $state]);
+        $items = $this->paginate("/repos/{$repo}/pulls", ['state' => $state->value], limit: $limit);
 
-        return collect($data)->values()->map(fn ($pr) => $this->mapPullRequest($pr, $repo));
+        return collect($items)->values()->map(fn (array $pr): PullRequest => $this->mapPullRequest($pr, $repo));
     }
 
-    /** @param array<string, mixed> $data */
-    public function updatePullRequest(string $repo, int $number, array $data): PullRequest
+    #[\Override]
+    public function updatePullRequest(string $repo, int $number, PullRequestUpdate $data): PullRequest
     {
-        $response = $this->request('patch', "/repos/{$repo}/pulls/{$number}", $data);
+        $response = $this->request('patch', "/repos/{$repo}/pulls/{$number}", $data->toArray());
 
         return $this->mapPullRequest($response, $repo);
     }
 
-    public function mergePullRequest(string $repo, int $number, ?string $method = null): void
+    #[\Override]
+    public function mergePullRequest(string $repo, int $number, ?MergeMethod $method = null): void
     {
         $data = [];
         if ($method !== null) {
-            $data['merge_method'] = $method;
+            $data['merge_method'] = $method->value;
         }
 
         $this->request('put', "/repos/{$repo}/pulls/{$number}/merge", $data);
     }
 
+    #[\Override]
     public function closePullRequest(string $repo, int $number): void
     {
-        $this->request('patch', "/repos/{$repo}/pulls/{$number}", ['state' => 'closed']);
+        $this->request('patch', "/repos/{$repo}/pulls/{$number}", ['state' => ItemState::Closed->value]);
     }
 
     // ── Reviews ─────────────────────────────────────────────
 
     /** @param list<string> $reviewers */
+    #[\Override]
     public function requestReview(string $repo, int $prNumber, array $reviewers): void
     {
         $this->request('post', "/repos/{$repo}/pulls/{$prNumber}/requested_reviewers", [
@@ -91,15 +123,17 @@ class GitHubProvider implements PlatformProvider
     }
 
     /** @return Collection<int, Review> */
-    public function listReviews(string $repo, int $prNumber): Collection
+    #[\Override]
+    public function listReviews(string $repo, int $prNumber, ?int $limit = null): Collection
     {
-        $data = $this->request('get', "/repos/{$repo}/pulls/{$prNumber}/reviews");
+        $items = $this->paginate("/repos/{$repo}/pulls/{$prNumber}/reviews", limit: $limit);
 
-        return collect($data)->values()->map(fn ($review) => $this->mapReview($review));
+        return collect($items)->values()->map(fn (array $review): Review => $this->mapReview($review));
     }
 
     // ── Comments ────────────────────────────────────────────
 
+    #[\Override]
     public function addComment(string $repo, int $number, string $body): Comment
     {
         $data = $this->request('post', "/repos/{$repo}/issues/{$number}/comments", [
@@ -110,13 +144,15 @@ class GitHubProvider implements PlatformProvider
     }
 
     /** @return Collection<int, Comment> */
-    public function listComments(string $repo, int $number): Collection
+    #[\Override]
+    public function listComments(string $repo, int $number, ?int $limit = null): Collection
     {
-        $data = $this->request('get', "/repos/{$repo}/issues/{$number}/comments");
+        $items = $this->paginate("/repos/{$repo}/issues/{$number}/comments", limit: $limit);
 
-        return collect($data)->values()->map(fn ($comment) => $this->mapComment($comment));
+        return collect($items)->values()->map(fn (array $comment): Comment => $this->mapComment($comment));
     }
 
+    #[\Override]
     public function addReviewComment(string $repo, int $prNumber, string $body, string $commitId, string $path, int $line): Comment
     {
         $data = $this->request('post', "/repos/{$repo}/pulls/{$prNumber}/comments", [
@@ -130,14 +166,14 @@ class GitHubProvider implements PlatformProvider
     }
 
     /**
-     * @param  array<int, array{path: string, line: int, body: string}>  $comments
-     * @return array<string, mixed>
+     * @param  list<ReviewCommentInput>  $comments
      */
-    public function submitReview(string $repo, int $prNumber, string $body, string $event = 'COMMENT', array $comments = [], ?string $commitId = null): array
+    #[\Override]
+    public function submitReview(string $repo, int $prNumber, string $body, ReviewEvent $event = ReviewEvent::Comment, array $comments = [], ?string $commitId = null): Review
     {
         $payload = [
             'body' => $body,
-            'event' => $event,
+            'event' => $event->value,
         ];
 
         if ($commitId !== null) {
@@ -145,19 +181,19 @@ class GitHubProvider implements PlatformProvider
         }
 
         if ($comments !== []) {
-            $payload['comments'] = array_map(fn (array $comment): array => [
-                'path' => $comment['path'],
-                'line' => $comment['line'],
-                'body' => $comment['body'],
-            ], $comments);
+            $payload['comments'] = array_map(
+                fn (ReviewCommentInput $comment): array => $comment->toArray(),
+                $comments,
+            );
         }
 
-        return $this->request('post', "/repos/{$repo}/pulls/{$prNumber}/reviews", $payload);
+        return $this->mapReview($this->request('post', "/repos/{$repo}/pulls/{$prNumber}/reviews", $payload));
     }
 
     // ── Issues ──────────────────────────────────────────────
 
     /** @param list<string> $labels */
+    #[\Override]
     public function createIssue(string $repo, string $title, string $body, array $labels = []): Issue
     {
         $data = $this->request('post', "/repos/{$repo}/issues", [
@@ -169,6 +205,7 @@ class GitHubProvider implements PlatformProvider
         return $this->mapIssue($data, $repo);
     }
 
+    #[\Override]
     public function getIssue(string $repo, int $number): Issue
     {
         $data = $this->request('get', "/repos/{$repo}/issues/{$number}");
@@ -177,52 +214,56 @@ class GitHubProvider implements PlatformProvider
     }
 
     /** @return Collection<int, Issue> */
-    public function listIssues(string $repo, string $state = 'open'): Collection
+    #[\Override]
+    public function listIssues(string $repo, ItemState $state = ItemState::Open, ?int $limit = null): Collection
     {
-        $data = $this->request('get', "/repos/{$repo}/issues", ['state' => $state]);
+        $items = $this->paginate("/repos/{$repo}/issues", ['state' => $state->value], limit: $limit);
 
-        return collect($data)->values()->map(fn ($issue) => $this->mapIssue($issue, $repo));
+        return collect($items)
+            ->reject(fn (array $issue): bool => isset($issue['pull_request']))
+            ->values()
+            ->map(fn (array $issue): Issue => $this->mapIssue($issue, $repo));
     }
 
-    /** @param array<string, mixed> $data */
-    public function updateIssue(string $repo, int $number, array $data): Issue
+    #[\Override]
+    public function updateIssue(string $repo, int $number, IssueUpdate $data): Issue
     {
-        $response = $this->request('patch', "/repos/{$repo}/issues/{$number}", $data);
+        $response = $this->request('patch', "/repos/{$repo}/issues/{$number}", $data->toArray());
 
         return $this->mapIssue($response, $repo);
     }
 
     // ── CI / Checks ─────────────────────────────────────────
 
+    /**
+     * Combined Status `state` is the legacy rollup from `/commits/{ref}/status`.
+     * Check runs (what GitHub Actions writes) are the source of truth for individual jobs.
+     */
+    #[\Override]
     public function getCiStatus(string $repo, string $ref): CiStatus
     {
         $statusData = $this->request('get', "/repos/{$repo}/commits/{$ref}/status");
-        $checkRunsData = $this->request('get', "/repos/{$repo}/commits/{$ref}/check-runs");
-
-        /** @var array<array<string, mixed>> $checkRunsArray */
-        $checkRunsArray = $checkRunsData['check_runs'] ?? [];
-        $checkRuns = collect($checkRunsArray)->values()->map(fn ($run) => $this->mapCheckRun($run));
+        $checkRuns = $this->listCheckRuns($repo, $ref);
 
         return new CiStatus(
-            state: $statusData['state'] ?? 'pending',
+            state: CiState::tryFrom($statusData['state'] ?? 'pending') ?? CiState::Pending,
             checkRuns: $checkRuns,
         );
     }
 
     /** @return Collection<int, CheckRun> */
-    public function listCheckRuns(string $repo, string $ref): Collection
+    #[\Override]
+    public function listCheckRuns(string $repo, string $ref, ?int $limit = null): Collection
     {
-        $data = $this->request('get', "/repos/{$repo}/commits/{$ref}/check-runs");
+        $items = $this->paginate("/repos/{$repo}/commits/{$ref}/check-runs", itemsKey: 'check_runs', limit: $limit);
 
-        /** @var array<array<string, mixed>> $checkRunsArray */
-        $checkRunsArray = $data['check_runs'] ?? [];
-
-        return collect($checkRunsArray)->values()->map(fn ($run) => $this->mapCheckRun($run));
+        return collect($items)->values()->map(fn (array $run): CheckRun => $this->mapCheckRun($run));
     }
 
     // ── Labels ──────────────────────────────────────────────
 
     /** @param list<string> $labels */
+    #[\Override]
     public function addLabels(string $repo, int $number, array $labels): void
     {
         $this->request('post', "/repos/{$repo}/issues/{$number}/labels", [
@@ -230,6 +271,7 @@ class GitHubProvider implements PlatformProvider
         ]);
     }
 
+    #[\Override]
     public function removeLabel(string $repo, int $number, string $label): void
     {
         $this->request('delete', "/repos/{$repo}/issues/{$number}/labels/{$label}");
@@ -237,6 +279,7 @@ class GitHubProvider implements PlatformProvider
 
     // ── Repository Info ─────────────────────────────────────
 
+    #[\Override]
     public function getRepository(string $repo): Repository
     {
         $data = $this->request('get', "/repos/{$repo}");
@@ -247,48 +290,53 @@ class GitHubProvider implements PlatformProvider
     // ── Notifications & Search ─────────────────────────────
 
     /** @return Collection<int, Notification> */
-    public function listNotifications(bool $all = false): Collection
+    #[\Override]
+    public function listNotifications(bool $all = false, ?int $limit = null): Collection
     {
-        $data = $this->request('get', '/notifications', ['all' => $all]);
+        $items = $this->paginate('/notifications', ['all' => $all], limit: $limit);
 
-        return collect($data)->values()->map(fn ($item) => $this->mapNotification($item));
+        return collect($items)->values()->map(fn (array $item): Notification => $this->mapNotification($item));
     }
 
-    /** @return Collection<int, PullRequest> */
-    public function searchPullRequests(string $query): Collection
+    /**
+     * Search pull requests. GitHub's search API caps results at 1000.
+     *
+     * @return Collection<int, PullRequest>
+     */
+    #[\Override]
+    public function searchPullRequests(string $query, ?int $limit = null): Collection
     {
-        $data = $this->request('get', '/search/issues', ['q' => "type:pr {$query}"]);
+        $items = $this->paginate('/search/issues', ['q' => "type:pr {$query}"], itemsKey: 'items', limit: $limit);
 
-        /** @var array<array<string, mixed>> $items */
-        $items = $data['items'] ?? [];
-
-        return collect($items)->values()->map(fn ($item) => $this->mapSearchPullRequest($item));
+        return collect($items)->values()->map(fn (array $item): PullRequest => $this->mapSearchPullRequest($item));
     }
 
-    /** @return Collection<int, Issue> */
-    public function searchIssues(string $query): Collection
+    /**
+     * Search issues. GitHub's search API caps results at 1000.
+     *
+     * @return Collection<int, Issue>
+     */
+    #[\Override]
+    public function searchIssues(string $query, ?int $limit = null): Collection
     {
-        $data = $this->request('get', '/search/issues', ['q' => "type:issue {$query}"]);
+        $items = $this->paginate('/search/issues', ['q' => "type:issue {$query}"], itemsKey: 'items', limit: $limit);
 
-        /** @var array<array<string, mixed>> $items */
-        $items = $data['items'] ?? [];
-
-        return collect($items)->values()->map(fn ($item) => $this->mapSearchIssue($item));
+        return collect($items)->values()->map(fn (array $item): Issue => $this->mapSearchIssue($item));
     }
 
     // ── Webhooks ────────────────────────────────────────────
 
     /** @return Collection<int, RepositoryWebhook> */
-    public function listWebhooks(string $repo): Collection
+    #[\Override]
+    public function listWebhooks(string $repo, ?int $limit = null): Collection
     {
-        $data = $this->request('get', "/repos/{$repo}/hooks");
+        $items = $this->paginate("/repos/{$repo}/hooks", limit: $limit);
 
-        /** @var array<array<string, mixed>> $items */
-        $items = $data;
-
-        return collect($items)->values()->map(fn ($item) => $this->mapRepositoryWebhook($item));
+        return collect($items)->values()->map(fn (array $item): RepositoryWebhook => $this->mapRepositoryWebhook($item));
     }
 
+    /** @param list<string> $events */
+    #[\Override]
     public function createWebhook(string $repo, string $url, array $events, ?string $secret = null): RepositoryWebhook
     {
         $payload = [
@@ -316,7 +364,35 @@ class GitHubProvider implements PlatformProvider
     {
         return Http::baseUrl($this->baseUrl)
             ->withToken($this->token)
-            ->acceptJson();
+            ->withHeaders([
+                'Accept' => 'application/vnd.github+json',
+                'X-GitHub-Api-Version' => $this->apiVersion,
+                'User-Agent' => self::USER_AGENT,
+            ])
+            ->retry(
+                times: self::RETRY_ATTEMPTS,
+                sleepMilliseconds: $this->retryDelay(...),
+                when: fn (Throwable $exception): bool => $this->shouldRetry($exception),
+            );
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    protected function send(string $method, string $url, array $data = []): Response
+    {
+        try {
+            /** @var Response $response */
+            $response = $this->http()->{$method}($url, $data);
+        } catch (RequestException $exception) {
+            throw $this->toPlatformException($exception->response);
+        }
+
+        if ($response->failed()) {
+            throw $this->toPlatformException($response);
+        }
+
+        return $response;
     }
 
     /**
@@ -325,55 +401,216 @@ class GitHubProvider implements PlatformProvider
      */
     protected function request(string $method, string $url, array $data = []): array
     {
-        $response = $this->http()->{$method}($url, $data);
+        return $this->send($method, $url, $data)->json() ?? [];
+    }
 
-        if ($response->failed()) {
-            throw new PlatformException(
-                message: $response->json('message', 'GitHub API error'),
-                statusCode: $response->status(),
-                response: $response->json(),
-            );
+    /**
+     * Collect list/search pages, following `Link: rel=next` up to {@see MAX_PAGES}.
+     *
+     * @param  array<string, mixed>  $query
+     * @return list<array<string, mixed>>
+     */
+    protected function paginate(string $url, array $query = [], ?string $itemsKey = null, ?int $limit = null, int $maxPages = self::MAX_PAGES): array
+    {
+        $query['per_page'] = min((int) ($query['per_page'] ?? self::PER_PAGE), self::PER_PAGE);
+
+        if ($limit !== null && $limit > 0) {
+            $query['per_page'] = min($query['per_page'], $limit);
         }
 
-        return $response->json() ?? [];
+        $items = [];
+        $nextUrl = $url;
+        $pageQuery = $query;
+
+        for ($page = 0; $page < $maxPages && $nextUrl !== null; $page++) {
+            $response = $this->send('get', $nextUrl, $pageQuery);
+            $pageItems = $this->pageItems($response->json(), $itemsKey);
+
+            foreach ($pageItems as $item) {
+                $items[] = $item;
+
+                if ($limit !== null && count($items) >= $limit) {
+                    return $items;
+                }
+            }
+
+            $nextUrl = $this->nextPageUrl($response);
+            $pageQuery = [];
+        }
+
+        return $items;
+    }
+
+    /**
+     * @param  mixed  $data
+     * @return list<array<string, mixed>>
+     */
+    protected function pageItems(mixed $data, ?string $itemsKey): array
+    {
+        if (! is_array($data)) {
+            return [];
+        }
+
+        $pageItems = $itemsKey !== null ? ($data[$itemsKey] ?? []) : $data;
+
+        if (! is_array($pageItems)) {
+            return [];
+        }
+
+        $items = [];
+
+        foreach (array_values($pageItems) as $item) {
+            if (is_array($item)) {
+                $items[] = $item;
+            }
+        }
+
+        return $items;
+    }
+
+    protected function nextPageUrl(Response $response): ?string
+    {
+        $link = $response->header('Link');
+
+        if (! is_string($link) || $link === '') {
+            return null;
+        }
+
+        foreach (explode(',', $link) as $part) {
+            if (preg_match('/<([^>]+)>;\s*rel="next"/', trim($part), $matches) === 1) {
+                return $matches[1];
+            }
+        }
+
+        return null;
+    }
+
+    protected function shouldRetry(Throwable $exception): bool
+    {
+        if ($exception instanceof ConnectionException) {
+            return true;
+        }
+
+        if (! $exception instanceof RequestException) {
+            return false;
+        }
+
+        $status = $exception->response->status();
+
+        if (in_array($status, [401, 404, 422], true)) {
+            return false;
+        }
+
+        if (in_array($status, [429, 502, 503, 504], true)) {
+            return true;
+        }
+
+        return $status === 403 && $this->isRateLimitResponse($exception->response);
+    }
+
+    protected function isRateLimitResponse(Response $response): bool
+    {
+        $message = strtolower((string) $response->json('message', ''));
+
+        if (str_contains($message, 'rate limit')) {
+            return true;
+        }
+
+        $remaining = $response->header('X-RateLimit-Remaining');
+
+        return $remaining !== '' && (int) $remaining === 0;
+    }
+
+    protected function retryDelay(int $attempt, mixed $exception): int
+    {
+        if ($exception instanceof RequestException) {
+            $fromHeaders = $this->retryDelayFromHeaders($exception->response);
+
+            if ($fromHeaders !== null) {
+                return $fromHeaders;
+            }
+        }
+
+        return 100 * (2 ** max(0, $attempt - 1));
+    }
+
+    protected function retryDelayFromHeaders(Response $response): ?int
+    {
+        $retryAfter = $response->header('Retry-After');
+
+        if (is_string($retryAfter) && $retryAfter !== '') {
+            if (is_numeric($retryAfter)) {
+                return max(0, (int) $retryAfter) * 1000;
+            }
+
+            $when = strtotime($retryAfter);
+
+            if ($when !== false) {
+                return max(0, $when - time()) * 1000;
+            }
+        }
+
+        $reset = $response->header('X-RateLimit-Reset');
+
+        if (is_string($reset) && $reset !== '' && is_numeric($reset)) {
+            return max(0, (int) $reset - time()) * 1000;
+        }
+
+        return null;
+    }
+
+    protected function toPlatformException(Response $response): PlatformException
+    {
+        /** @var array<string, mixed>|null $body */
+        $body = $response->json();
+
+        return new PlatformException(
+            message: is_array($body) ? (string) ($body['message'] ?? 'GitHub API error') : 'GitHub API error',
+            statusCode: $response->status(),
+            response: is_array($body) ? $body : null,
+        );
     }
 
     /** @param array<string, mixed> $data */
     protected function mapPullRequest(array $data, string $repo): PullRequest
     {
-        return (new PullRequest(
+        return new PullRequest(
             number: $data['number'],
             title: $data['title'],
             body: $data['body'] ?? '',
-            state: $data['state'],
+            state: ItemState::tryFrom($data['state'] ?? 'open') ?? ItemState::Open,
             head: $data['head']['ref'],
             base: $data['base']['ref'],
             url: $data['html_url'],
             author: $data['user']['login'],
             draft: $data['draft'] ?? false,
-            mergeable: $data['mergeable'] ?? false,
+            mergeable: array_key_exists('mergeable', $data) ? $data['mergeable'] : null,
             labels: array_values(array_map(fn ($l) => $l['name'], $data['labels'] ?? [])),
             reviewers: array_values(array_map(fn ($r) => $r['login'], $data['requested_reviewers'] ?? [])),
             createdAt: isset($data['created_at']) ? CarbonImmutable::parse($data['created_at']) : null,
             updatedAt: isset($data['updated_at']) ? CarbonImmutable::parse($data['updated_at']) : null,
             mergedAt: isset($data['merged_at']) ? CarbonImmutable::parse($data['merged_at']) : null,
-        ))->withProvider($this, $repo);
+            provider: $this,
+            repo: $repo,
+        );
     }
 
     /** @param array<string, mixed> $data */
     protected function mapIssue(array $data, string $repo): Issue
     {
-        return (new Issue(
+        return new Issue(
             number: $data['number'],
             title: $data['title'],
             body: $data['body'] ?? '',
-            state: $data['state'],
+            state: ItemState::tryFrom($data['state'] ?? 'open') ?? ItemState::Open,
             url: $data['html_url'],
             author: $data['user']['login'],
             labels: array_values(array_map(fn ($l) => $l['name'], $data['labels'] ?? [])),
             assignees: array_values(array_map(fn ($a) => $a['login'], $data['assignees'] ?? [])),
             createdAt: isset($data['created_at']) ? CarbonImmutable::parse($data['created_at']) : null,
-        ))->withProvider($this, $repo);
+            provider: $this,
+            repo: $repo,
+        );
     }
 
     /** @param array<string, mixed> $data */
@@ -395,18 +632,22 @@ class GitHubProvider implements PlatformProvider
             id: $data['id'],
             state: $data['state'],
             body: $data['body'] ?? '',
-            author: $data['user']['login'],
+            author: $data['user']['login'] ?? '',
+            commitId: $data['commit_id'] ?? null,
+            submittedAt: isset($data['submitted_at']) ? CarbonImmutable::parse($data['submitted_at']) : null,
         );
     }
 
     /** @param array<string, mixed> $data */
     protected function mapCheckRun(array $data): CheckRun
     {
+        $conclusion = $data['conclusion'] ?? null;
+
         return new CheckRun(
             id: $data['id'],
             name: $data['name'],
-            status: $data['status'],
-            conclusion: $data['conclusion'] ?? null,
+            status: CheckRunStatus::tryFrom($data['status'] ?? '') ?? CheckRunStatus::Queued,
+            conclusion: is_string($conclusion) ? CheckRunConclusion::tryFrom($conclusion) : null,
             url: $data['html_url'],
         );
     }
@@ -444,22 +685,24 @@ class GitHubProvider implements PlatformProvider
     {
         $repo = $this->extractRepoFromUrl($data['repository_url'] ?? $data['html_url']);
 
-        return (new PullRequest(
+        return new PullRequest(
             number: $data['number'],
             title: $data['title'],
             body: $data['body'] ?? '',
-            state: $data['state'],
+            state: ItemState::tryFrom($data['state'] ?? 'open') ?? ItemState::Open,
             head: '',
             base: '',
             url: $data['pull_request']['html_url'] ?? $data['html_url'],
             author: $data['user']['login'],
             draft: $data['draft'] ?? false,
-            mergeable: false,
+            mergeable: null,
             labels: array_values(array_map(fn ($l) => $l['name'], $data['labels'] ?? [])),
             reviewers: array_values(array_map(fn ($r) => $r['login'], $data['requested_reviewers'] ?? [])),
             createdAt: isset($data['created_at']) ? CarbonImmutable::parse($data['created_at']) : null,
             updatedAt: isset($data['updated_at']) ? CarbonImmutable::parse($data['updated_at']) : null,
-        ))->withProvider($this, $repo);
+            provider: $this,
+            repo: $repo,
+        );
     }
 
     /** @param array<string, mixed> $data */
@@ -467,17 +710,19 @@ class GitHubProvider implements PlatformProvider
     {
         $repo = $this->extractRepoFromUrl($data['repository_url'] ?? $data['html_url']);
 
-        return (new Issue(
+        return new Issue(
             number: $data['number'],
             title: $data['title'],
             body: $data['body'] ?? '',
-            state: $data['state'],
+            state: ItemState::tryFrom($data['state'] ?? 'open') ?? ItemState::Open,
             url: $data['html_url'],
             author: $data['user']['login'],
             labels: array_values(array_map(fn ($l) => $l['name'], $data['labels'] ?? [])),
             assignees: array_values(array_map(fn ($a) => $a['login'], $data['assignees'] ?? [])),
             createdAt: isset($data['created_at']) ? CarbonImmutable::parse($data['created_at']) : null,
-        ))->withProvider($this, $repo);
+            provider: $this,
+            repo: $repo,
+        );
     }
 
     /** @param array<string, mixed> $data */
