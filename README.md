@@ -273,13 +273,14 @@ Graft ships nine ready-to-use tools for the [Laravel AI SDK](https://github.com/
 Register them with an Agent like any other Laravel AI tool:
 
 ```php
-use Laravel\Ai\Agent;
+use Laravel\Ai\Contracts\Agent;
+use Laravel\Ai\Contracts\HasTools;
 use Laravel\Ai\Promptable;
 use Graft\Ai\Tools\GitLogTool;
 use Graft\Ai\Tools\GitStatusTool;
 use Graft\Ai\Tools\GitHubListPrsTool;
 
-class ReleaseManager extends Agent
+class ReleaseManager implements Agent, HasTools
 {
     use Promptable;
 
@@ -291,9 +292,9 @@ class ReleaseManager extends Agent
     public function tools(): array
     {
         return [
-            GitLogTool::class,
-            GitStatusTool::class,
-            GitHubListPrsTool::class,
+            new GitLogTool,
+            new GitStatusTool,
+            new GitHubListPrsTool,
         ];
     }
 }
@@ -312,8 +313,10 @@ $json = $tool->handle(new Request(['repo_path' => '/path/to/repo', 'limit' => 5]
 **Requires** the optional `laravel/ai` dependency:
 
 ```bash
-composer require laravel/ai
+composer require laravel/ai:^1.0.1
 ```
+
+Graft's AI tools require Laravel AI SDK 1.0.1 or newer; older SDK versions are rejected by Composer even when Graft is installed without development dependencies. The SDK remains optional for non-AI usage. Applications upgrading from SDK 0.10 should follow the [0.11 and 1.0 upgrade guides](https://github.com/laravel/ai/blob/v1.0.1/UPGRADE.md), including any conversation migrations and token-usage changes in their own code; Graft does not store conversations or consume token usage.
 
 The tools call into the `Git` and `GitHub` facades under the hood, so `Git::fake()` and `GitHub::fake()` work exactly the same way for testing them.
 

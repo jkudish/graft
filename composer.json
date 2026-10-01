@@ -24,14 +24,17 @@
     },
     "require-dev": {
         "larastan/larastan": "^3.0",
-        "laravel/ai": "^0.10",
+        "laravel/ai": "^1.0.1",
         "laravel/pint": "^1.0",
         "orchestra/testbench": "^11.0",
         "pestphp/pest": "^5.0",
         "pestphp/pest-plugin-agent": "^5.0"
     },
+    "conflict": {
+        "laravel/ai": "<1.0.1"
+    },
     "suggest": {
-        "laravel/ai": "Required to use the optional AI tools in Graft\\Ai\\Tools (^0.10)"
+        "laravel/ai": "Required to use the optional AI tools in Graft\\Ai\\Tools (^1.0.1)"
     },
     "autoload": {
         "psr-4": {
